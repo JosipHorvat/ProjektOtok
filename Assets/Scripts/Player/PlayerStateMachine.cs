@@ -1,4 +1,4 @@
-public class PlayerStateMachine
+public sealed class PlayerStateMachine
 {
     public PlayerState CurrentState { get; private set; }
 

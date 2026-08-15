@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>Player state used while horizontal movement input is active.</summary>
-public class PlayerMoveState : PlayerGroundedState
+public sealed class PlayerMoveState : PlayerGroundedState
 {
     public PlayerMoveState(Player player, PlayerStateMachine stateMachine, string animBoolName)
         : base(player, stateMachine, animBoolName)
@@ -11,7 +11,7 @@ public class PlayerMoveState : PlayerGroundedState
     public override void Enter()
     {
         base.Enter();
-        player.CheckIfShouldFlip(Mathf.RoundToInt(xInput));
+        player.CheckIfShouldFlip(InputDirection);
     }
 
     public override void Update()
@@ -23,13 +23,13 @@ public class PlayerMoveState : PlayerGroundedState
             return;
         }
 
-        if (Mathf.Abs(xInput) <= 0.01f)
+        if (Mathf.Abs(xInput) <= PlayerState.HorizontalInputThreshold)
         {
             stateMachine.ChangeState(player.idleState);
             return;
         }
 
-        player.CheckIfShouldFlip(Mathf.RoundToInt(xInput));
+        player.CheckIfShouldFlip(InputDirection);
     }
 
     public override void FixedUpdate()
@@ -39,9 +39,6 @@ public class PlayerMoveState : PlayerGroundedState
             return;
         }
 
-        float targetVelocityX = xInput * player.moveSpeed;
-        float movementStep = player.smoothMovement * player.moveSpeed * Time.fixedDeltaTime;
-        float velocityX = Mathf.MoveTowards(rb.linearVelocity.x, targetVelocityX, movementStep);
-        player.SetHorizontalVelocity(velocityX);
+        player.ApplyGroundMovement(xInput);
     }
 }

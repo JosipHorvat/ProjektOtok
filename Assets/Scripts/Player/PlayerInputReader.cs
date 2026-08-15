@@ -1,15 +1,12 @@
-using System;
 using UnityEngine;
 
 /// <summary>Owns the generated input actions and exposes player input to gameplay systems.</summary>
+[DefaultExecutionOrder(-100)]
 public sealed class PlayerInputReader : MonoBehaviour
 {
     private InputSystem_Actions inputActions;
     private Vector2 moveInput;
     private float lastJumpPressedTime = float.NegativeInfinity;
-
-    /// <summary>Raised when the player movement input changes.</summary>
-    public event Action<Vector2> MoveInputChanged;
 
     /// <summary>Current movement input from the Player action map.</summary>
     public Vector2 MoveInput => moveInput;
@@ -91,6 +88,5 @@ public sealed class PlayerInputReader : MonoBehaviour
         }
 
         moveInput = nextInput;
-        MoveInputChanged?.Invoke(moveInput);
     }
 }

@@ -57,7 +57,7 @@ Transform:
   m_GameObject: {fileID: 1020970540719908097}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.32, y: 0.22, z: 0}
+  m_LocalPosition: {x: -0.32, y: 0.308, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -169,9 +169,9 @@ GameObject:
   m_Component:
   - component: {fileID: 3643590196927284862}
   - component: {fileID: 904984562848437280}
-  - component: {fileID: 8386813915470924694}
   - component: {fileID: 5889938468884981719}
   - component: {fileID: 2401167635385166009}
+  - component: {fileID: 5442267993439181621}
   m_Layer: 9
   m_Name: Player
   m_TagString: Untagged
@@ -213,6 +213,14 @@ MonoBehaviour:
   smoothMovement: 10
   acceleration: 120
   airDeceleration: 30
+  maxSlopeAngle: 50
+  slopeStickSpeed: 6
+  maximumGroundSnapSpeed: 25
+  groundLossGraceTime: 0.08
+  groundProbeWidth: 0.5
+  groundProbeSkin: 0.05
+  stepForwardDistance: 0.08
+  maximumStepDownDistance: 0.25
   jumpForce: 35
   jumpTimeMax: 0.5
   fallAcceleration: 110
@@ -223,7 +231,7 @@ MonoBehaviour:
   jumpBufferTime: 0.15
   jumpCutVelocityMultiplier: 0.4
   groundCheck: {fileID: 7831753859753309255}
-  groundCheckDistance: 0.2
+  groundCheckDistance: 0.05
   groundCheckSize: {x: 0.94, y: 0.09}
   whatIsGround:
     serializedVersion: 2
@@ -233,52 +241,6 @@ MonoBehaviour:
   whatIsWall:
     serializedVersion: 2
     m_Bits: 1024
---- !u!61 &8386813915470924694
-BoxCollider2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2606814258713735347}
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Density: 1
-  m_Material: {fileID: 6200000, guid: 6d0738a36373e77438b4ab1cf12a5e8e, type: 2}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ForceSendLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ForceReceiveLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ContactCaptureLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_CallbackLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_IsTrigger: 0
-  m_UsedByEffector: 0
-  m_CompositeOperation: 0
-  m_CompositeOrder: 0
-  m_Offset: {x: -0.3607852, y: 1.6278429}
-  m_SpriteTilingProperty:
-    border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0, y: 0}
-    oldSize: {x: 0, y: 0}
-    newSize: {x: 0, y: 0}
-    adaptiveTilingThreshold: 0
-    drawMode: 0
-    adaptiveTiling: 0
-  m_AutoTiling: 0
-  m_Size: {x: 1.4574071, y: 3.0046253}
-  m_EdgeRadius: 0
 --- !u!50 &5889938468884981719
 Rigidbody2D:
   serializedVersion: 5
@@ -318,6 +280,43 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f14b754603d2794db5b2d0e805683e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInputReader
+--- !u!70 &5442267993439181621
+CapsuleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2606814258713735347}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 6200000, guid: 6d0738a36373e77438b4ab1cf12a5e8e, type: 2}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: -0.32, y: 1.7057476}
+  m_Size: {x: 1.29, y: 3.0785046}
+  m_Direction: 0
 --- !u!1 &3086208912321217205
 GameObject:
   m_ObjectHideFlags: 0
@@ -331,6 +330,7 @@ GameObject:
   - component: {fileID: 153165105521711695}
   - component: {fileID: 5601858054461521469}
   - component: {fileID: 8737846787685643550}
+  - component: {fileID: 2470665454757718780}
   m_Layer: 9
   m_Name: Animator
   m_TagString: Untagged
@@ -519,6 +519,20 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &2470665454757718780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3086208912321217205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0afea8fc6c417e409d6bef1e8ad68b1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerSlopeVisuals
+  maximumVisualTilt: 12
+  tiltSmoothTime: 0.08
 --- !u!1 &4440845588423187547
 GameObject:
   m_ObjectHideFlags: 0

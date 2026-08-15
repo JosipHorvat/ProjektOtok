@@ -142,10 +142,16 @@ public class MainMenuManager : MonoBehaviour
         Debug.Log("MainMenuManager: Options menu is not implemented yet.", this);
     }
 
-    /// <summary>Reserved for the future credits menu.</summary>
+    /// <summary>Loads the dedicated non-gameplay Credits scene.</summary>
     public void OpenCredits()
     {
-        Debug.Log("MainMenuManager: Credits menu is not implemented yet.", this);
+        if (SceneManagement.Instance == null)
+        {
+            Debug.LogError("MainMenuManager: SceneManagement is not available.", this);
+            return;
+        }
+
+        SceneManagement.Instance.LoadScene("Credits");
     }
 
     /// <summary>Quits the running application or exits Play Mode in the Unity Editor.</summary>

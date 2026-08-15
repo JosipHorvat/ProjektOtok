@@ -1,13 +1,11 @@
 using UnityEngine;
 
-/// <summary>
-/// Scales this GameObject's transform to simulate squash on landing.
-/// Attach to the Player's Animator child so only visuals are affected,
-/// never the physics collider on the Player root.
-/// Uses LateUpdate to guarantee the scale is applied after the Animator updates.
-/// </summary>
-public class PlayerSquash : MonoBehaviour
+/// <summary>Applies a landing squash to the visual hierarchy without affecting player physics.</summary>
+public sealed class PlayerSquash : MonoBehaviour
 {
+    private const float RecoveryOvershootTime = 0.55f;
+    private const float RecoveryOvershootScale = 1.1f;
+
     [Header("Squash Shape")]
     [SerializeField] private float squashScaleX = 1.25f;
     [SerializeField] private float squashScaleY = 0.75f;
@@ -16,48 +14,59 @@ public class PlayerSquash : MonoBehaviour
     [SerializeField] private float duration = 0.25f;
     [SerializeField] private AnimationCurve recoveryCurve;
 
-    private bool  isSquashing = false;
-    private float elapsed     = 0f;
+    private Vector3 baseLocalScale;
+    private bool isSquashing;
+    private float elapsed;
+
+    private void Awake()
+    {
+        baseLocalScale = transform.localScale;
+
+        if (recoveryCurve == null || recoveryCurve.length == 0)
+        {
+            recoveryCurve = CreateDefaultRecoveryCurve();
+        }
+    }
 
     private void Reset()
     {
-        // Pre-bake a slight overshoot so the robot snaps back with a spring feel.
-        recoveryCurve = new AnimationCurve(
-            new Keyframe(0f,    0f,  0f, 4f),
-            new Keyframe(0.55f, 1.1f),
-            new Keyframe(1f,    1f)
-        );
+        recoveryCurve = CreateDefaultRecoveryCurve();
     }
 
-    /// <summary>
-    /// Instantly squashes the transform, then springs back to normal scale.
-    /// Safe to call mid-animation — restarts the squash from the beginning.
-    /// </summary>
+    /// <summary>Restarts the landing squash effect from its compressed pose.</summary>
     public void TriggerSquash()
     {
         isSquashing = true;
-        elapsed     = 0f;
+        elapsed = 0f;
     }
 
-    // LateUpdate runs after the Animator, so our scale always wins.
     private void LateUpdate()
     {
-        if (!isSquashing) return;
+        if (!isSquashing)
+        {
+            return;
+        }
 
         elapsed += Time.deltaTime;
-
         if (elapsed >= duration)
         {
-            transform.localScale = Vector3.one;
+            transform.localScale = baseLocalScale;
             isSquashing = false;
             return;
         }
 
-        float t = recoveryCurve.Evaluate(elapsed / duration);
+        float recovery = recoveryCurve.Evaluate(elapsed / duration);
         transform.localScale = new Vector3(
-            Mathf.Lerp(squashScaleX, 1f, t),
-            Mathf.Lerp(squashScaleY, 1f, t),
-            1f
-        );
+            baseLocalScale.x * Mathf.Lerp(squashScaleX, 1f, recovery),
+            baseLocalScale.y * Mathf.Lerp(squashScaleY, 1f, recovery),
+            baseLocalScale.z);
+    }
+
+    private static AnimationCurve CreateDefaultRecoveryCurve()
+    {
+        return new AnimationCurve(
+            new Keyframe(0f, 0f, 0f, 4f),
+            new Keyframe(RecoveryOvershootTime, RecoveryOvershootScale),
+            new Keyframe(1f, 1f));
     }
 }

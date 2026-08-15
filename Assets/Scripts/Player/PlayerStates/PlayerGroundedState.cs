@@ -18,20 +18,16 @@ public class PlayerGroundedState : PlayerState
     {
         base.Update();
 
-        bool grounded = player.IsGroundDetected();
-        if (!grounded)
+        if (!player.ShouldRemainGrounded)
         {
             stateMachine.ChangeState(player.airState);
             return;
         }
 
-        player.MarkGrounded();
-
-        if (player.InputReader.HasBufferedJump(player.jumpBufferTime))
+        if (player.HasGroundContact)
         {
-            player.InputReader.ConsumeJumpBuffer();
-            player.ConsumeCoyoteJump();
-            stateMachine.ChangeState(player.jumpState);
+            player.MarkGrounded();
+            TryStartBufferedJump();
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -34,15 +35,17 @@ public sealed class IngameUIManager : MonoBehaviour
         }
 
         GameManager.Instance.PauseGame();
+        AudioManager.Instance?.PauseMusic();
         pauseMenuPanel.SetActive(true);
         optionsMenuPanel?.SetActive(false);
-        SelectButton(firstSelectedButton != null ? firstSelectedButton : resumeButton);
+        SelectSelectable(firstSelectedButton != null ? firstSelectedButton : resumeButton);
     }
 
     /// <summary>Resumes gameplay and closes the authored menus.</summary>
     public void ResumeGame()
     {
         GameManager.Instance?.ResumeGame();
+        AudioManager.Instance?.ResumeMusic();
         CloseMenus();
     }
 
@@ -80,7 +83,11 @@ public sealed class IngameUIManager : MonoBehaviour
     [SerializeField] private GameObject optionsMenuPanel;
     [SerializeField] private Button optionsBackButton;
     [SerializeField] private Button optionsFirstSelectedButton;
-    [SerializeField] private Button[] optionsButtons;
+    [SerializeField] private Selectable optionsFirstSelectedControl;
+    [SerializeField] private Selectable[] optionsControls;
+    [SerializeField] private Slider masterVolumeSlider;
+    [SerializeField] private Slider musicVolumeSlider;
+    [SerializeField] private Slider sfxVolumeSlider;
 
     /// <summary>Opens the authored options panel while gameplay remains paused.</summary>
     public void OpenOptions()
@@ -92,7 +99,8 @@ public sealed class IngameUIManager : MonoBehaviour
 
         pauseMenuPanel?.SetActive(false);
         optionsMenuPanel?.SetActive(true);
-        SelectButton(optionsFirstSelectedButton != null ? optionsFirstSelectedButton : optionsBackButton);
+        SyncAudioSliders();
+        SelectSelectable(optionsFirstSelectedControl != null ? optionsFirstSelectedControl : optionsFirstSelectedButton);
     }
 
     /// <summary>Returns from the authored options panel to the pause panel.</summary>
@@ -105,7 +113,7 @@ public sealed class IngameUIManager : MonoBehaviour
 
         optionsMenuPanel?.SetActive(false);
         pauseMenuPanel?.SetActive(true);
-        SelectButton(firstSelectedButton != null ? firstSelectedButton : resumeButton);
+        SelectSelectable(firstSelectedButton != null ? firstSelectedButton : resumeButton);
     }
 
     #endregion
@@ -179,6 +187,7 @@ public sealed class IngameUIManager : MonoBehaviour
         if (!gameplaySceneActive)
         {
             GameManager.Instance?.ResumeGame();
+            AudioManager.Instance?.ResumeMusic();
         }
     }
 
@@ -194,6 +203,7 @@ public sealed class IngameUIManager : MonoBehaviour
         quitButton?.onClick.AddListener(QuitGame);
         optionsBackButton?.onClick.RemoveListener(CloseOptions);
         optionsBackButton?.onClick.AddListener(CloseOptions);
+        RegisterAudioSliderListeners();
     }
 
     private void UnregisterButtonListeners()
@@ -203,6 +213,7 @@ public sealed class IngameUIManager : MonoBehaviour
         mainMenuButton?.onClick.RemoveListener(LoadMainMenu);
         quitButton?.onClick.RemoveListener(QuitGame);
         optionsBackButton?.onClick.RemoveListener(CloseOptions);
+        UnregisterAudioSliderListeners();
     }
 
     private void CloseMenus()
@@ -212,11 +223,11 @@ public sealed class IngameUIManager : MonoBehaviour
         EventSystem.current?.SetSelectedGameObject(null);
     }
 
-    private static void SelectButton(Button button)
+    private static void SelectSelectable(Selectable selectable)
     {
-        if (EventSystem.current != null && button != null && button.IsActive() && button.IsInteractable())
+        if (EventSystem.current != null && selectable != null && selectable.IsActive() && selectable.IsInteractable())
         {
-            EventSystem.current.SetSelectedGameObject(button.gameObject);
+            EventSystem.current.SetSelectedGameObject(selectable.gameObject);
         }
     }
 
@@ -227,35 +238,43 @@ public sealed class IngameUIManager : MonoBehaviour
         ConfigureVerticalNavigation(mainMenuButton, quitButton, optionsButton);
         ConfigureVerticalNavigation(quitButton, null, mainMenuButton);
 
-        if (optionsButtons == null || optionsButtons.Length == 0)
+        if (optionsControls == null || optionsControls.Length == 0)
         {
-            optionsButtons = optionsMenuPanel != null ? optionsMenuPanel.GetComponentsInChildren<Button>(true) : Array.Empty<Button>();
+            optionsControls = optionsMenuPanel != null
+                ? optionsMenuPanel.GetComponentsInChildren<Selectable>(true)
+                : Array.Empty<Selectable>();
         }
 
-        int optionButtonCount = optionsButtons.Length;
-        if (optionButtonCount > 0 && optionsButtons[optionButtonCount - 1] == optionsBackButton)
+        List<Selectable> navigableOptions = new List<Selectable>();
+        foreach (Selectable control in optionsControls)
         {
-            optionButtonCount--;
+            if (control != null && control != optionsBackButton)
+            {
+                navigableOptions.Add(control);
+            }
         }
 
-        for (int index = 0; index < optionButtonCount; index++)
+        for (int index = 0; index < navigableOptions.Count; index++)
         {
-            Button up = index > 0 ? optionsButtons[index - 1] : null;
-            Button down = index + 1 < optionButtonCount ? optionsButtons[index + 1] : optionsBackButton;
-            ConfigureVerticalNavigation(optionsButtons[index], down, up);
+            Selectable up = index > 0 ? navigableOptions[index - 1] : null;
+            Selectable down = index + 1 < navigableOptions.Count ? navigableOptions[index + 1] : optionsBackButton;
+            ConfigureVerticalNavigation(navigableOptions[index], down, up);
         }
 
-        ConfigureVerticalNavigation(optionsBackButton, null, optionButtonCount > 0 ? optionsButtons[optionButtonCount - 1] : optionsFirstSelectedButton);
+        Selectable lastOption = navigableOptions.Count > 0
+            ? navigableOptions[navigableOptions.Count - 1]
+            : optionsFirstSelectedControl != null ? optionsFirstSelectedControl : optionsFirstSelectedButton;
+        ConfigureVerticalNavigation(optionsBackButton, null, lastOption);
     }
 
-    private static void ConfigureVerticalNavigation(Button button, Button down, Button up)
+    private static void ConfigureVerticalNavigation(Selectable selectable, Selectable down, Selectable up)
     {
-        if (button == null)
+        if (selectable == null)
         {
             return;
         }
 
-        button.navigation = new Navigation
+        selectable.navigation = new Navigation
         {
             mode = Navigation.Mode.Explicit,
             wrapAround = false,
@@ -264,6 +283,51 @@ public sealed class IngameUIManager : MonoBehaviour
             selectOnLeft = null,
             selectOnRight = null
         };
+    }
+
+    private void RegisterAudioSliderListeners()
+    {
+        masterVolumeSlider?.onValueChanged.RemoveListener(SetMasterVolume);
+        musicVolumeSlider?.onValueChanged.RemoveListener(SetMusicVolume);
+        sfxVolumeSlider?.onValueChanged.RemoveListener(SetSFXVolume);
+
+        masterVolumeSlider?.onValueChanged.AddListener(SetMasterVolume);
+        musicVolumeSlider?.onValueChanged.AddListener(SetMusicVolume);
+        sfxVolumeSlider?.onValueChanged.AddListener(SetSFXVolume);
+    }
+
+    private void UnregisterAudioSliderListeners()
+    {
+        masterVolumeSlider?.onValueChanged.RemoveListener(SetMasterVolume);
+        musicVolumeSlider?.onValueChanged.RemoveListener(SetMusicVolume);
+        sfxVolumeSlider?.onValueChanged.RemoveListener(SetSFXVolume);
+    }
+
+    private void SyncAudioSliders()
+    {
+        if (AudioManager.Instance == null)
+        {
+            return;
+        }
+
+        masterVolumeSlider?.SetValueWithoutNotify(AudioManager.Instance.MasterVolume);
+        musicVolumeSlider?.SetValueWithoutNotify(AudioManager.Instance.MusicVolume);
+        sfxVolumeSlider?.SetValueWithoutNotify(AudioManager.Instance.SFXVolume);
+    }
+
+    private static void SetMasterVolume(float value)
+    {
+        AudioManager.Instance?.SetMasterVolume(value);
+    }
+
+    private static void SetMusicVolume(float value)
+    {
+        AudioManager.Instance?.SetMusicVolume(value);
+    }
+
+    private static void SetSFXVolume(float value)
+    {
+        AudioManager.Instance?.SetSFXVolume(value);
     }
 
     #endregion

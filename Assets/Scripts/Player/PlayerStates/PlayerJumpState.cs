@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class PlayerJumpState : PlayerState
+public sealed class PlayerJumpState : PlayerState
 {
     private float jumpTime;
     private bool jumpCut;
@@ -19,14 +19,14 @@ public class PlayerJumpState : PlayerState
         jumpCut = false;
 
         player.SetVerticalVelocity(player.jumpForce);
-        player.CheckIfShouldFlip(Mathf.RoundToInt(xInput));
+        player.CheckIfShouldFlip(InputDirection);
     }
 
     public override void Update()
     {
         base.Update();
 
-        player.CheckIfShouldFlip(Mathf.RoundToInt(xInput));
+        player.CheckIfShouldFlip(InputDirection);
 
         if (jumpTime < player.jumpTimeMax)
         {

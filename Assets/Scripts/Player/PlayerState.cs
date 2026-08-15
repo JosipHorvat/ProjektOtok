@@ -1,18 +1,22 @@
 using UnityEngine;
 
-/// <summary>Base behavior shared by player states.</summary>
-public class PlayerState
+/// <summary>Base behavior shared by all player states.</summary>
+public abstract class PlayerState
 {
-    protected PlayerStateMachine stateMachine;
-    protected Player player;
+    private const string VerticalVelocityParameter = "yVelocity";
+
+    public const float HorizontalInputThreshold = 0.01f;
+
+    protected readonly PlayerStateMachine stateMachine;
+    protected readonly Player player;
     protected Rigidbody2D rb;
     protected float xInput;
-    protected float yInput;
-    protected string animBoolName;
-    protected float stateTimer;
-    protected bool triggerCalled;
+    protected readonly string animBoolName;
+    protected bool HasMovementInput => Mathf.Abs(xInput) > HorizontalInputThreshold;
+    protected int InputDirection => Mathf.RoundToInt(xInput);
+    protected bool IsCurrentState => stateMachine.CurrentState == this;
 
-    public PlayerState(Player player, PlayerStateMachine stateMachine, string animBoolName)
+    protected PlayerState(Player player, PlayerStateMachine stateMachine, string animBoolName)
     {
         this.player = player;
         this.stateMachine = stateMachine;
@@ -23,7 +27,6 @@ public class PlayerState
     public virtual void Enter()
     {
         rb = player.rb;
-        triggerCalled = false;
 
         if (player.anim != null && !string.IsNullOrEmpty(animBoolName))
         {
@@ -31,19 +34,28 @@ public class PlayerState
         }
     }
 
-    /// <summary>Reads shared player input for the current state.</summary>
+    /// <summary>Reads shared player input and updates common animation values.</summary>
     public virtual void Update()
     {
-        stateTimer -= Time.deltaTime;
-
-        Vector2 moveInput = player.MoveInput;
-        xInput = moveInput.x;
-        yInput = moveInput.y;
+        xInput = player.MoveInput.x;
 
         if (player.anim != null && rb != null)
         {
-            player.anim.SetFloat("yVelocity", rb.linearVelocity.y);
+            player.anim.SetFloat(VerticalVelocityParameter, player.GetAnimationVerticalVelocity());
         }
+    }
+
+    protected bool TryStartBufferedJump()
+    {
+        if (!player.HasGroundContact || player.InputReader == null || !player.InputReader.HasBufferedJump(player.jumpBufferTime))
+        {
+            return false;
+        }
+
+        player.InputReader.ConsumeJumpBuffer();
+        player.ConsumeCoyoteJump();
+        stateMachine.ChangeState(player.jumpState);
+        return true;
     }
 
     /// <summary>Applies state-specific physics movement.</summary>
@@ -58,11 +70,5 @@ public class PlayerState
         {
             player.anim.SetBool(animBoolName, false);
         }
-    }
-
-    /// <summary>Marks the state's animation trigger as complete.</summary>
-    public virtual void AnimationFinishTrigger()
-    {
-        triggerCalled = true;
     }
 }
