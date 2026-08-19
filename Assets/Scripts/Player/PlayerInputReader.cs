@@ -14,6 +14,9 @@ public sealed class PlayerInputReader : MonoBehaviour
     /// <summary>Returns true during the frame in which the Interact action is pressed.</summary>
     public bool InteractPressedThisFrame => CanReadGameplayInput && inputActions != null && inputActions.Player.Interact.WasPressedThisFrame();
 
+    /// <summary>Returns true while the Interact action is held.</summary>
+    public bool InteractHeld => CanReadGameplayInput && inputActions != null && inputActions.Player.Interact.IsPressed();
+
     /// <summary>Returns true during the frame in which the Pause action is pressed.</summary>
     public bool PausePressedThisFrame => inputActions != null && inputActions.Player.Pause.WasPressedThisFrame();
 
