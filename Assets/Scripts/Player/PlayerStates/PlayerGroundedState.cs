@@ -18,16 +18,18 @@ public class PlayerGroundedState : PlayerState
     {
         base.Update();
 
-        if (!player.ShouldRemainGrounded)
+        if (!player.HasGroundContact)
         {
+            if (TryStartBufferedJump())
+            {
+                return;
+            }
+
             stateMachine.ChangeState(player.airState);
             return;
         }
 
-        if (player.HasGroundContact)
-        {
-            player.MarkGrounded();
-            TryStartBufferedJump();
-        }
+        player.MarkGrounded();
+        TryStartBufferedJump();
     }
 }

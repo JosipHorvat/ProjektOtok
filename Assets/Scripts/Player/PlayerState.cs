@@ -47,7 +47,15 @@ public abstract class PlayerState
 
     protected bool TryStartBufferedJump()
     {
-        if (!player.HasGroundContact || player.InputReader == null || !player.InputReader.HasBufferedJump(player.jumpBufferTime))
+        if (player.InputReader == null || !player.InputReader.HasBufferedJump(player.jumpBufferTime))
+        {
+            return false;
+        }
+
+        bool hasGroundContact = player.HasGroundContact;
+        bool canUseCoyoteJump = !hasGroundContact && player.CanUseCoyoteJump();
+       
+        if (!hasGroundContact && !canUseCoyoteJump)
         {
             return false;
         }

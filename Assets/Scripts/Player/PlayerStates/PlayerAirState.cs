@@ -13,32 +13,42 @@ public sealed class PlayerAirState : PlayerState
         base.Update();
         player.CheckIfShouldFlip(InputDirection);
 
-        bool hasBufferedJump = player.InputReader.HasBufferedJump(player.jumpBufferTime);
-        if (hasBufferedJump && player.CanUseCoyoteJump())
+        if (!player.IsGroundDetected() && TryStartBufferedJump())
         {
-            player.InputReader.ConsumeJumpBuffer();
-            player.ConsumeCoyoteJump();
-            stateMachine.ChangeState(player.jumpState);
             return;
         }
 
-        if (player.HasGroundContact)
-        {
-            player.MarkGrounded();
-            player.TriggerLandingSquash();
-
-            if (TryStartBufferedJump())
-            {
-                return;
-            }
-
-            stateMachine.ChangeState(HasMovementInput ? player.moveState : player.idleState);
-        }
+        TryLand();
     }
 
     public override void FixedUpdate()
     {
+        if (TryLand())
+        {
+            stateMachine.CurrentState?.FixedUpdate();
+            return;
+        }
+
         player.ApplyAirMovement(xInput);
         player.ApplyGravity(false, false);
+    }
+
+    private bool TryLand()
+    {
+        if (!player.IsGroundDetected())
+        {
+            return false;
+        }
+
+        player.MarkGrounded();
+        player.TriggerLandingSquash();
+
+        if (TryStartBufferedJump())
+        {
+            return true;
+        }
+
+        stateMachine.ChangeState(HasMovementInput ? player.moveState : player.idleState);
+        return true;
     }
 }

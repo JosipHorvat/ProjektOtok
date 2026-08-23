@@ -28,17 +28,31 @@ public sealed class PlayerJumpState : PlayerState
 
         player.CheckIfShouldFlip(InputDirection);
 
-        if (jumpTime < player.jumpTimeMax)
+        // If the player has landed, immediately leave the jump state.
+        if (player.HasGroundContact && rb.linearVelocity.y <= 0f)
         {
-            jumpTime += Time.deltaTime;
+            player.MarkGrounded();
+
+            player.TriggerLandingSquash();
+
+            stateMachine.ChangeState(
+                HasMovementInput
+                    ? player.moveState
+                    : player.idleState);
+
+            return;
         }
 
-        if (!jumpCut &&
-            jumpTime < player.jumpTimeMax &&
-            player.InputReader.JumpReleasedThisFrame &&
-            rb.linearVelocity.y > 0f)
+        if (!jumpCut && rb.linearVelocity.y > 0f)
         {
-            CutJumpShort();
+            jumpTime += Time.deltaTime;
+
+            bool jumpTimeExpired = jumpTime >= player.jumpTimeMax;
+
+            if (jumpTimeExpired || player.InputReader.JumpReleasedThisFrame)
+            {
+                CutJumpShort();
+            }
         }
 
         if (rb.linearVelocity.y <= 0f)
@@ -56,6 +70,8 @@ public sealed class PlayerJumpState : PlayerState
     private void CutJumpShort()
     {
         jumpCut = true;
-        player.SetVerticalVelocity(rb.linearVelocity.y * player.JumpCutVelocityMultiplier);
+
+        player.SetVerticalVelocity(
+            rb.linearVelocity.y * player.JumpCutVelocityMultiplier);
     }
 }
