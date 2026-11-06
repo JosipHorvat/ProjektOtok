@@ -46,6 +46,12 @@ public sealed class PlayerInputReader : MonoBehaviour
         inputActions != null &&
         inputActions.Player.FocusAim.WasPressedThisFrame();
 
+    /// <summary>Returns true when the held Focus Aim action came from a gamepad.</summary>
+    public bool FocusAimUsesGamepad =>
+        FocusAimHeld &&
+        inputActions != null &&
+        inputActions.Player.FocusAim.activeControl?.device is Gamepad;
+
     /// <summary>Returns true during the frame in which Reload is pressed.</summary>
     public bool ReloadPressedThisFrame =>
         CanReadGameplayInput &&

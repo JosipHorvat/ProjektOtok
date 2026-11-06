@@ -392,8 +392,18 @@ public class Player : MonoBehaviour
 
     public void CheckIfShouldFlip(int inputDirection)
     {
-        if (inputDirection != 0 &&
-            inputDirection != facingDir)
+        if (InputReader != null && InputReader.FocusAimHeld)
+        {
+            return;
+        }
+
+        SetFacingDirection(inputDirection);
+    }
+
+    /// <summary>Turns the player toward a nonzero horizontal direction.</summary>
+    public void SetFacingDirection(int direction)
+    {
+        if (direction != 0 && direction != facingDir)
         {
             Flip();
         }
