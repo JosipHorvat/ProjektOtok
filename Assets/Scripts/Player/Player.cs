@@ -4,39 +4,55 @@ using UnityEngine;
 public class Player : MonoBehaviour
 {
     #region Constants
+
     private const float MinimumInput = PlayerState.HorizontalInputThreshold;
     private const float MinimumTangentHorizontal = 0.01f;
-    private const float GroundContactHeightTolerance = 0.01f;
+    private const float GroundedVerticalVelocityThreshold = 0.1f;
+    private const float JumpApexVelocityThreshold = 2.5f;
+
     #endregion
 
     #region Component References
+
     public Animator anim { get; private set; }
     public Rigidbody2D rb { get; private set; }
     public PlayerInputReader InputReader { get; private set; }
 
     private CapsuleCollider2D capsuleCollider;
     private PlayerSquash playerSquash;
+
     #endregion
 
     #region Movement Settings
+
     [Header("Movement")]
     public float moveSpeed = 5f;
     public float smoothMovement = 10f;
     public float acceleration = 120f;
     public float airDeceleration = 30f;
+
     #endregion
 
     #region Slope and Grounding Settings
+
     [Header("Slope Movement")]
-    [SerializeField, Range(0f, 89f)] private float maxSlopeAngle = 50f;
-    [SerializeField] private float slopeStickSpeed = 6f;
-    [SerializeField] private float maximumGroundSnapSpeed = 25f;
+    [SerializeField, Range(0f, 89f)]
+    private float maxSlopeAngle = 50f;
+
+    [SerializeField]
+    private float slopeStickSpeed = 6f;
+
+    [SerializeField]
+    private float maximumGroundSnapSpeed = 25f;
 
     [Tooltip("Extra cast distance used to keep ground contact stable over small gaps and slopes.")]
-    [SerializeField] private float groundProbeSkin = 0.05f;
+    [SerializeField]
+    private float groundProbeSkin = 0.05f;
+
     #endregion
 
     #region Jump Settings
+
     [Header("Jump")]
     public float jumpForce = 10f;
 
@@ -46,18 +62,29 @@ public class Player : MonoBehaviour
     public float fallAcceleration = 110f;
     public float maxFallSpeed = 40f;
     public float jumpEndEarlyGravityModifier = 3f;
+
+    [Header("Jump Apex Control")]
+    [Tooltip("Gravity multiplier used briefly around the top of a full jump. Lower values create a softer apex.")]
+    [Range(0.1f, 1f)]
+    public float jumpApexGravityMultiplier = 0.75f;
+
+    [Tooltip("Duration of the gentle gravity phase around the top of a full jump.")]
+    [Min(0f)]
+    public float jumpApexHangTime = 0.03f;
+
     public float groundingForce = -1.5f;
     public float coyoteTime = 0.15f;
     public float jumpBufferTime = 0.15f;
-    public bool hasJumped { get; set; }
 
     [SerializeField, Range(0f, 1f)]
     private float jumpCutVelocityMultiplier = 0.4f;
 
     public float JumpCutVelocityMultiplier => jumpCutVelocityMultiplier;
+
     #endregion
 
     #region Collision Check Settings
+
     [Header("Ground Check")]
     public Transform groundCheck;
     public float groundCheckDistance = 0.2f;
@@ -68,11 +95,17 @@ public class Player : MonoBehaviour
     public Transform wallCheck;
     public float wallCheckDistance = 0.5f;
     public LayerMask whatIsWall;
+
     #endregion
 
     #region Runtime State
+
     private float lastGroundedTime = float.NegativeInfinity;
     private bool coyoteJumpAvailable;
+    private float jumpApexTimeRemaining;
+    private bool jumpApexUsed;
+    private bool jumpApexControlAvailable;
+    private readonly ContactPoint2D[] groundContacts = new ContactPoint2D[16];
 
     private GroundInfo currentGroundInfo;
 
@@ -85,31 +118,40 @@ public class Player : MonoBehaviour
         0f);
 
     public int facingDir { get; private set; } = 1;
-    public bool isBusy { get; private set; }
+
     #endregion
 
     #region State Machine
+
     public PlayerStateMachine stateMachine { get; private set; }
+
     public PlayerIdleState idleState { get; private set; }
     public PlayerMoveState moveState { get; private set; }
     public PlayerJumpState jumpState { get; private set; }
     public PlayerAirState airState { get; private set; }
+
     #endregion
 
     #region Public State Data
+
     public Vector2 MoveInput => InputReader.MoveInput;
 
     public GroundInfo CurrentGroundInfo =>
-        currentGroundInfo.HasGround ? currentGroundInfo : lastWalkableGroundInfo;
+        currentGroundInfo.HasGround
+            ? currentGroundInfo
+            : lastWalkableGroundInfo;
 
     public bool HasGroundContact => currentGroundInfo.HasGround;
+
     #endregion
 
     #region Unity Lifecycle
+
     private void Awake()
     {
         InitializeStates();
         CacheComponents();
+
         rb.gravityScale = 0f;
     }
 
@@ -124,20 +166,66 @@ public class Player : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // Ground information is refreshed before any state physics runs.
         RefreshGroundInfo();
+        ResolveGroundedState();
+
         stateMachine.CurrentState?.FixedUpdate();
     }
+
     #endregion
 
     #region Movement
+
+    /// <summary>Transitions airborne states to a grounded state as soon as contact is confirmed.</summary>
+    private void ResolveGroundedState()
+    {
+        if (!HasGroundContact ||
+            rb.linearVelocity.y > GroundedVerticalVelocityThreshold ||
+            (stateMachine.CurrentState != jumpState &&
+             stateMachine.CurrentState != airState))
+        {
+            return;
+        }
+
+        StopAtGround();
+        MarkGrounded();
+
+        bool hasMovementInput = HasLiveMovementInput;
+
+        if (!hasMovementInput)
+        {
+            SetHorizontalVelocity(0f);
+        }
+
+        stateMachine.ChangeState(
+            hasMovementInput
+                ? moveState
+                : idleState);
+    }
+
     public void SetHorizontalVelocity(float velocityX) =>
-        rb.linearVelocity = new Vector2(velocityX, rb.linearVelocity.y);
+        rb.linearVelocity = new Vector2(
+            velocityX,
+            rb.linearVelocity.y);
 
     public void SetVerticalVelocity(float velocityY) =>
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, velocityY);
+        rb.linearVelocity = new Vector2(
+            rb.linearVelocity.x,
+            velocityY);
 
     public void SetZeroVelocity() =>
         rb.linearVelocity = Vector2.zero;
+
+    /// <summary>Returns true when the latest movement input contains horizontal intent.</summary>
+    public bool HasLiveMovementInput =>
+        Mathf.Abs(MoveInput.x) > MinimumInput;
+
+    /// <summary>Stops vertical jump or fall motion when a landing is confirmed.</summary>
+    public void StopAtGround()
+    {
+        SetVerticalVelocity(groundingForce);
+    }
 
     public void ApplyGroundMovement(float horizontalInput)
     {
@@ -155,7 +243,9 @@ public class Player : MonoBehaviour
         }
 
         Vector2 tangent = CurrentGroundInfo.Tangent;
-        float targetHorizontalVelocity = horizontalInput * moveSpeed;
+
+        float targetHorizontalVelocity =
+            horizontalInput * moveSpeed;
 
         float horizontalVelocity = Mathf.MoveTowards(
             rb.linearVelocity.x,
@@ -167,7 +257,9 @@ public class Player : MonoBehaviour
             MinimumTangentHorizontal);
 
         float slopeVerticalVelocity =
-            horizontalVelocity * tangent.y / tangentHorizontal;
+            horizontalVelocity *
+            tangent.y /
+            tangentHorizontal;
 
         if (slopeVerticalVelocity < 0f)
             slopeVerticalVelocity -= slopeStickSpeed;
@@ -181,11 +273,13 @@ public class Player : MonoBehaviour
 
     public void ApplyAirMovement(float horizontalInput)
     {
-        float targetVelocityX = horizontalInput * moveSpeed;
+        float targetVelocityX =
+            horizontalInput * moveSpeed;
 
-        float movementRate = Mathf.Abs(horizontalInput) > MinimumInput
-            ? acceleration
-            : airDeceleration;
+        float movementRate =
+            Mathf.Abs(horizontalInput) > MinimumInput
+                ? acceleration
+                : airDeceleration;
 
         float velocityX = Mathf.MoveTowards(
             rb.linearVelocity.x,
@@ -195,7 +289,22 @@ public class Player : MonoBehaviour
         SetHorizontalVelocity(velocityX);
     }
 
-    public void ApplyGravity(bool grounded, bool jumpEndedEarly)
+    #endregion
+
+ 
+    #region Gravity
+
+    /// <summary>Resets the one-shot apex control for a newly started jump.</summary>
+    public void ResetJumpApexControl()
+    {
+        jumpApexTimeRemaining = 0f;
+        jumpApexUsed = false;
+        jumpApexControlAvailable = true;
+    }
+
+    public void ApplyGravity(
+        bool grounded,
+        bool jumpEndedEarly)
     {
         if (grounded && rb.linearVelocity.y <= 0f)
         {
@@ -203,9 +312,29 @@ public class Player : MonoBehaviour
             return;
         }
 
-        float gravity = jumpEndedEarly && rb.linearVelocity.y > 0f
-            ? fallAcceleration * jumpEndEarlyGravityModifier
-            : fallAcceleration;
+        if (jumpEndedEarly)
+        {
+            jumpApexTimeRemaining = 0f;
+            jumpApexUsed = true;
+            jumpApexControlAvailable = false;
+        }
+
+        float gravity =
+            jumpEndedEarly &&
+            rb.linearVelocity.y > 0f
+                ? fallAcceleration *
+                  jumpEndEarlyGravityModifier
+                : fallAcceleration;
+
+        if (!jumpEndedEarly &&
+            (jumpApexTimeRemaining > 0f || TryStartJumpApex()))
+        {
+            gravity *= jumpApexGravityMultiplier;
+            jumpApexTimeRemaining =
+                Mathf.Max(
+                    0f,
+                    jumpApexTimeRemaining - Time.fixedDeltaTime);
+        }
 
         float velocityY = Mathf.MoveTowards(
             rb.linearVelocity.y,
@@ -214,9 +343,26 @@ public class Player : MonoBehaviour
 
         SetVerticalVelocity(velocityY);
     }
+
+    private bool TryStartJumpApex()
+    {
+        if (jumpApexUsed ||
+            !jumpApexControlAvailable ||
+            jumpApexHangTime <= 0f ||
+            Mathf.Abs(rb.linearVelocity.y) > JumpApexVelocityThreshold)
+        {
+            return false;
+        }
+
+        jumpApexUsed = true;
+        jumpApexTimeRemaining = jumpApexHangTime;
+        return true;
+    }
+
     #endregion
 
     #region Grounding and Jump Timing
+
     public void MarkGrounded()
     {
         lastGroundedTime = Time.time;
@@ -228,70 +374,111 @@ public class Player : MonoBehaviour
         if (!coyoteJumpAvailable)
             return false;
 
-        if (Time.time > lastGroundedTime + coyoteTime)
+        if (Time.time >
+            lastGroundedTime + coyoteTime)
+        {
             coyoteJumpAvailable = false;
+        }
 
         return coyoteJumpAvailable;
     }
 
     public void ConsumeCoyoteJump() =>
         coyoteJumpAvailable = false;
+
     #endregion
 
     #region Facing
+
     public void CheckIfShouldFlip(int inputDirection)
     {
-        if (inputDirection != 0 && inputDirection != facingDir)
+        if (inputDirection != 0 &&
+            inputDirection != facingDir)
+        {
             Flip();
+        }
     }
 
     public void Flip()
     {
         facingDir *= -1;
-        transform.Rotate(0f, 180f, 0f);
+
+        transform.Rotate(
+            0f,
+            180f,
+            0f);
     }
+
     #endregion
 
     #region Animation and Interaction
+
     public void TriggerLandingSquash() =>
         playerSquash?.TriggerSquash();
 
     public float GetAnimationVerticalVelocity() =>
-        HasGroundContact ? 0f : rb.linearVelocity.y;
+        HasGroundContact
+            ? 0f
+            : rb.linearVelocity.y;
 
-    public void SetBusyFor(float duration)
-    {
-        isBusy = true;
-        Invoke(nameof(ClearBusy), duration);
-    }
-
-    private void ClearBusy() =>
-        isBusy = false;
     #endregion
 
     #region Initialization
+
     private void InitializeStates()
     {
-        stateMachine = new PlayerStateMachine();
+        stateMachine =
+            new PlayerStateMachine();
 
-        idleState = new PlayerIdleState(this, stateMachine, "Idle");
-        moveState = new PlayerMoveState(this, stateMachine, "Move");
-        jumpState = new PlayerJumpState(this, stateMachine, "Jump");
-        airState = new PlayerAirState(this, stateMachine, "Jump");
+        idleState =
+            new PlayerIdleState(
+                this,
+                stateMachine,
+                "Idle");
+
+        moveState =
+            new PlayerMoveState(
+                this,
+                stateMachine,
+                "Move");
+
+        jumpState =
+            new PlayerJumpState(
+                this,
+                stateMachine,
+                "Jump");
+
+        airState =
+            new PlayerAirState(
+                this,
+                stateMachine,
+                "Jump");
     }
 
     private void CacheComponents()
     {
-        anim = GetComponentInChildren<Animator>();
-        playerSquash = GetComponentInChildren<PlayerSquash>();
-        rb = GetComponent<Rigidbody2D>();
-        capsuleCollider = GetComponent<CapsuleCollider2D>();
-        InputReader = GetComponent<PlayerInputReader>();
+        anim =
+            GetComponentInChildren<Animator>();
+
+        playerSquash =
+            GetComponentInChildren<PlayerSquash>();
+
+        rb =
+            GetComponent<Rigidbody2D>();
+
+        capsuleCollider =
+            GetComponent<CapsuleCollider2D>();
+
+        InputReader =
+            GetComponent<PlayerInputReader>();
     }
+
     #endregion
 
     #region Collision Checks
-    public bool IsGroundDetected() => HasGroundContact;
+
+    public bool IsGroundDetected() =>
+        HasGroundContact;
 
     public bool IsAnyWallDetected() =>
         wallCheck != null &&
@@ -303,35 +490,56 @@ public class Player : MonoBehaviour
 
     private void RefreshGroundInfo()
     {
-        bool wasGrounded = currentGroundInfo.HasGround;
+        Bounds bounds =
+            capsuleCollider.bounds;
 
-        Bounds bounds = capsuleCollider.bounds;
-        Vector2 origin = GetGroundCastOrigin(bounds);
+        Vector2 origin =
+            GetGroundCastOrigin(bounds);
 
-        RaycastHit2D hit = Physics2D.BoxCast(
-            origin,
-            GetGroundCastSize(bounds),
-            0f,
-            Vector2.down,
-            GetGroundCastDistance(),
-            whatIsGround);
+        RaycastHit2D hit =
+            Physics2D.BoxCast(
+                origin,
+                GetGroundCastSize(bounds),
+                0f,
+                Vector2.down,
+                GetGroundCastDistance(),
+                whatIsGround);
 
-        if (!IsGroundHitValid(hit, bounds, wasGrounded))
+        if (IsGroundHitValid(hit))
         {
-            LoseGroundContact();
+            SetGroundContactFromHit(hit, bounds);
             return;
         }
 
-        Vector2 normal = hit.normal.normalized;
-        Vector2 tangent = new Vector2(normal.y, -normal.x).normalized;
+        if (TrySetGroundContactFromPhysicsContacts())
+        {
+            return;
+        }
 
-        float distance = Mathf.Max(
-            0f,
-            bounds.min.y - hit.point.y);
+        LoseGroundContact();
+    }
 
-        float angle = Vector2.SignedAngle(
-            Vector2.right,
-            tangent);
+    private void SetGroundContactFromHit(
+        RaycastHit2D hit,
+        Bounds bounds)
+    {
+        Vector2 normal =
+            hit.normal.normalized;
+
+        Vector2 tangent =
+            new Vector2(
+                normal.y,
+                -normal.x).normalized;
+
+        float distance =
+            Mathf.Max(
+                0f,
+                bounds.min.y - hit.point.y);
+
+        float angle =
+            Vector2.SignedAngle(
+                Vector2.right,
+                tangent);
 
         SetGroundContact(
             normal,
@@ -339,18 +547,64 @@ public class Player : MonoBehaviour
             hit.point,
             distance,
             angle);
-
-        if (!wasGrounded && rb.linearVelocity.y > 0f)
-        {
-            Debug.Log(
-                $"SUSPICIOUS GROUND HIT | " +
-                $"State: {stateMachine.CurrentState.GetType().Name} | " +
-                $"Y Velocity: {rb.linearVelocity.y:F2} | " +
-                $"Distance: {distance:F3} | " +
-                $"Hit: {hit.collider.name} | " +
-                $"Normal: {normal}");
-        }
     }
+
+    private bool TrySetGroundContactFromPhysicsContacts()
+    {
+        int contactCount =
+            capsuleCollider.GetContacts(groundContacts);
+
+        for (int i = 0; i < contactCount; i++)
+        {
+            ContactPoint2D contact =
+                groundContacts[i];
+
+            if (contact.otherCollider == null ||
+                !IsLayerInGroundMask(
+                    contact.otherCollider.gameObject.layer))
+            {
+                continue;
+            }
+
+            Vector2 normal =
+                contact.normal.normalized;
+
+            if (normal.y < 0f)
+            {
+                normal = -normal;
+            }
+
+            if (normal.y <= 0f ||
+                Vector2.Angle(normal, Vector2.up) > maxSlopeAngle)
+            {
+                continue;
+            }
+
+            Vector2 tangent =
+                new Vector2(
+                    normal.y,
+                    -normal.x).normalized;
+
+            float angle =
+                Vector2.SignedAngle(
+                    Vector2.right,
+                    tangent);
+
+            SetGroundContact(
+                normal,
+                tangent,
+                contact.point,
+                0f,
+                angle);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsLayerInGroundMask(int layer) =>
+        (whatIsGround.value & (1 << layer)) != 0;
 
     private void SetGroundContact(
         Vector2 normal,
@@ -359,59 +613,52 @@ public class Player : MonoBehaviour
         float distance,
         float angle)
     {
-        currentGroundInfo = new GroundInfo(
-            true,
-            normal,
-            tangent,
-            point,
-            distance,
-            angle);
+        currentGroundInfo =
+            new GroundInfo(
+                true,
+                normal,
+                tangent,
+                point,
+                distance,
+                angle);
 
-        lastWalkableGroundInfo = currentGroundInfo;
+        lastWalkableGroundInfo =
+            currentGroundInfo;
     }
 
     private void LoseGroundContact()
     {
-        if (currentGroundInfo.HasGround)
-        {
-            Debug.Log(
-                $"LOST GROUND | State: {stateMachine.CurrentState.GetType().Name} | " +
-                $"Y Velocity: {rb.linearVelocity.y:F2}");
-
-            MarkGrounded();
-        }
-
-        currentGroundInfo = new GroundInfo(
-            false,
-            lastWalkableGroundInfo.Normal,
-            lastWalkableGroundInfo.Tangent,
-            lastWalkableGroundInfo.Point,
-            lastWalkableGroundInfo.Distance,
-            lastWalkableGroundInfo.Angle);
+        // IMPORTANT:
+        // Losing ground contact does NOT mean we are grounded.
+        // Coyote time should only be started when we actually land.
+        currentGroundInfo =
+            new GroundInfo(
+                false,
+                lastWalkableGroundInfo.Normal,
+                lastWalkableGroundInfo.Tangent,
+                lastWalkableGroundInfo.Point,
+                lastWalkableGroundInfo.Distance,
+                lastWalkableGroundInfo.Angle);
     }
 
-    private bool IsGroundHitValid(
-        RaycastHit2D hit,
-        Bounds bounds,
-        bool wasGrounded)
-    {
-        if (!IsWalkable(hit))
-            return false;
+    private bool IsGroundHitValid(RaycastHit2D hit) =>
+        IsWalkable(hit);
 
-        bool hitIsAboveFootLine =
-            hit.point.y > bounds.min.y + GroundContactHeightTolerance;
-
-        return wasGrounded || !hitIsAboveFootLine || rb.linearVelocity.y <= 0f;
-    }
-    private bool IsWalkable(RaycastHit2D hit) =>
+    private bool IsWalkable(
+        RaycastHit2D hit) =>
         hit.collider != null &&
-        Vector2.Angle(hit.normal, Vector2.up) <= maxSlopeAngle;
+        Vector2.Angle(
+            hit.normal,
+            Vector2.up) <= maxSlopeAngle;
+
     #endregion
 
     #region Helpers
+
     private float GetGroundSnapSpeed()
     {
-        float gap = CurrentGroundInfo.Distance;
+        float gap =
+            CurrentGroundInfo.Distance;
 
         if (gap <= 0f)
             return 0f;
@@ -422,26 +669,41 @@ public class Player : MonoBehaviour
     }
 
     private float GetGroundCastDistance() =>
-        groundCheckDistance + groundProbeSkin;
+        groundCheckDistance +
+        groundProbeSkin;
 
-    private Vector2 GetGroundCastOrigin(Bounds bounds)
+    private Vector2 GetGroundCastOrigin(
+        Bounds bounds)
     {
-        Vector2 castSize = GetGroundCastSize(bounds);
-        float castOriginX = groundCheck != null
-            ? groundCheck.position.x
-            : bounds.center.x;
-        float castOriginY = bounds.min.y - castSize.y * 0.5f;
+        Vector2 castSize =
+            GetGroundCastSize(bounds);
 
-        return new Vector2(castOriginX, castOriginY);
+        float castOriginX =
+            groundCheck != null
+                ? groundCheck.position.x
+                : bounds.center.x;
+
+        float castOriginY =
+            bounds.min.y -
+            castSize.y * 0.5f;
+
+        return new Vector2(
+            castOriginX,
+            castOriginY);
     }
 
-    private Vector2 GetGroundCastSize(Bounds bounds) =>
+    private Vector2 GetGroundCastSize(
+        Bounds bounds) =>
         new Vector2(
-            Mathf.Min(groundCheckSize.x, bounds.size.x),
+            Mathf.Min(
+                groundCheckSize.x,
+                bounds.size.x),
             groundCheckSize.y);
+
     #endregion
 
     #region Data Types
+
     public readonly struct GroundInfo
     {
         public GroundInfo(
@@ -467,31 +729,67 @@ public class Player : MonoBehaviour
         public float Distance { get; }
         public float Angle { get; }
     }
+
     #endregion
 
     #region Gizmos
+
     private void OnDrawGizmosSelected()
     {
-        CapsuleCollider2D capsule = capsuleCollider != null
-            ? capsuleCollider
-            : GetComponent<CapsuleCollider2D>();
+        CapsuleCollider2D capsule =
+            capsuleCollider != null
+                ? capsuleCollider
+                : GetComponent<CapsuleCollider2D>();
 
         if (capsule == null)
             return;
 
-        Bounds bounds = capsule.bounds;
-        Vector2 origin = GetGroundCastOrigin(bounds);
-        Vector2 size = GetGroundCastSize(bounds);
-        float distance = GetGroundCastDistance();
+        Bounds bounds =
+            capsule.bounds;
 
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireCube(origin, size);
+        Vector2 origin =
+            GetGroundCastOrigin(bounds);
+
+        Vector2 size =
+            GetGroundCastSize(bounds);
+
+        float distance =
+            GetGroundCastDistance();
+
+        Gizmos.color =
+            Color.red;
+
         Gizmos.DrawWireCube(
-            origin + Vector2.down * distance,
+            origin,
             size);
 
-        DrawGizmoCastEdge(origin, size.x, distance, -0.5f);
-        DrawGizmoCastEdge(origin, size.x, distance, 0.5f);
+        Gizmos.DrawWireCube(
+            origin +
+            Vector2.down * distance,
+            size);
+
+        DrawGizmoCastEdge(
+            origin,
+            size.x,
+            distance,
+            -0.5f);
+
+        DrawGizmoCastEdge(
+            origin,
+            size.x,
+            distance,
+            0.5f);
+
+        if (wallCheck != null)
+        {
+            Gizmos.DrawLine(
+                wallCheck.position,
+                wallCheck.position +
+                new Vector3(
+                    wallCheckDistance *
+                    facingDir,
+                    0));
+        }
     }
 
     private void DrawGizmoCastEdge(
@@ -500,11 +798,18 @@ public class Player : MonoBehaviour
         float distance,
         float side)
     {
-        Vector2 edge = origin + Vector2.right * width * side;
+        Vector2 edge =
+            origin +
+            Vector2.right *
+            width *
+            side;
 
         Gizmos.DrawLine(
             edge,
-            edge + Vector2.down * distance);
+            edge +
+            Vector2.down *
+            distance);
     }
+
     #endregion
 }

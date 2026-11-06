@@ -16,11 +16,21 @@ public sealed class PlayerIdleState : PlayerGroundedState
         {
             return;
         }
-
+        
         if (HasMovementInput)
         {
+            bool movingTowardFacingWall =
+                InputDirection == player.facingDir &&
+                player.IsAnyWallDetected();
+
+            if (movingTowardFacingWall)
+            {
+                return;
+            }
+
             stateMachine.ChangeState(player.moveState);
         }
+      
     }
 
     public override void FixedUpdate()

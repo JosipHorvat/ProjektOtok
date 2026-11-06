@@ -238,7 +238,7 @@ MonoBehaviour:
   IgnoreTimeScale: 0
   WorldUpOverride: {fileID: 0}
   ChannelMask: -1
-  UpdateMethod: 2
+  UpdateMethod: 1
   BlendUpdateMethod: 1
   LensModeOverride:
     Enabled: 1
@@ -356,11 +356,11 @@ MonoBehaviour:
       Offset: {x: 0, y: 0}
   CenterOnActivate: 1
   TargetOffset: {x: 0, y: 0.5, z: 0}
-  Damping: {x: 0.3, y: 0.3, z: 0}
+  Damping: {x: 0.55, y: 0.75, z: 0}
   Lookahead:
-    Enabled: 1
-    Time: 0.35
-    Smoothing: 7
+    Enabled: 0
+    Time: 0
+    Smoothing: 0
     IgnoreY: 1
 --- !u!114 &6204197809504858371
 MonoBehaviour:

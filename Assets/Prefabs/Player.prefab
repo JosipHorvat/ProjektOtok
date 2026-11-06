@@ -532,12 +532,14 @@ MonoBehaviour:
   fallAcceleration: 80
   maxFallSpeed: 35
   jumpEndEarlyGravityModifier: 2.5
+  jumpApexGravityMultiplier: 0.75
+  jumpApexHangTime: 0.03
   groundingForce: -1.5
   coyoteTime: 0.1
   jumpBufferTime: 0.15
   jumpCutVelocityMultiplier: 0.4
   groundCheck: {fileID: 7831753859753309255}
-  groundCheckDistance: 0.05
+  groundCheckDistance: 0.15
   groundCheckSize: {x: 0.94, y: 0.09}
   whatIsGround:
     serializedVersion: 2

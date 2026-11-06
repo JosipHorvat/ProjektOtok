@@ -8,12 +8,6 @@ public class PlayerGroundedState : PlayerState
     {
     }
 
-    public override void Enter()
-    {
-        base.Enter();
-        player.hasJumped = false;
-    }
-
     public override void Update()
     {
         base.Update();

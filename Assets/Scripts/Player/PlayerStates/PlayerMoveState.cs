@@ -23,6 +23,16 @@ public sealed class PlayerMoveState : PlayerGroundedState
             return;
         }
 
+        bool movingTowardFacingWall =
+           InputDirection == player.facingDir &&
+           player.IsAnyWallDetected();
+
+        if (movingTowardFacingWall)
+        {
+            stateMachine.ChangeState(player.idleState);
+            return;
+        }
+
         if (Mathf.Abs(xInput) <= PlayerState.HorizontalInputThreshold)
         {
             stateMachine.ChangeState(player.idleState);
@@ -34,11 +44,6 @@ public sealed class PlayerMoveState : PlayerGroundedState
 
     public override void FixedUpdate()
     {
-        if (rb == null)
-        {
-            return;
-        }
-
         player.ApplyGroundMovement(xInput);
     }
 }
