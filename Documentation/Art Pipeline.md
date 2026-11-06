@@ -129,27 +129,7 @@ Za URP 2D rasvjetu definirane su dvije opcije bez ručnog slikanja normal mapa:
    - **Unity `Cinemachine` (Službeni besplatni paket):** Upravljanje kamerom, granice prostorija (*Confiner 2D*) i glatki **2× Zoom-in / Zoom-out** prijelazi.
    - **FEEL (by More Mountains - Asset Store):** Gotov sustav za *combat juice* (hit-stop, camera shake, bljesak sprajta pri udarcu, upravljanje česticama i zvukom).
 
-> **TODO / Napomena za Asset Store:** Pretražiti i detaljno istražiti Unity Asset Store za navedene kategorije (posebice alate za *spline-based* platforme, *secondary motion* fiziku kostiju, 2D osvjetljenje/volumetrijsku maglu i gotove 2D URP shadere) prije izrade vlastitih custom rješenja.
-
----
-
-## 9. Art Pipeline – To Do
-
-1. **Odrediti veličinu lika na ekranu i točan broj Unita po visini ekrana** (definirati omjer glavnog lika u odnosu na `3840 × 2160 px` ekran, npr. `10 unita` uz `216 PPU` ili `10.8 unita` uz `200 PPU`).
-2. **Donijeti odluku za tehniku skeletalne animacije:** *Mesh Deformation* vs. *Cutout* (ili hibridni pristup).
-3. **Pretražiti i evaluirati Unity Asset Store rješenja:**
-   - Spline-based platforme (usporediti ugrađeni `2D Sprite Shape` s Asset Store alatima).
-   - Fizika kostiju (*Secondary Motion* za plašt, kosu i opremu — npr. *Boing Kit*, *Spring Bones*).
-   - 2D URP shaderi i volumetrijska magla (*All In 1 Sprite Shader*, *Volumetric Fog & Mist 2* / *HAZE*, *Smart Lighting 2D*).
-   - Combat juice i kamera efekti (*FEEL*).
-4. **Odabrati i testirati pristup za 2D rasvjetu / Normal mape:**
-   - Testirati *Opciju A* (ComfyUI Batch Auto-Normal generator) u usporedbi s *Opcijom B* (Custom URP Shader Graph bez normal tekstura).
-5. **Definirati točnu strukturu foldera i konvenciju imenovanja** u Unity projektu (`Assets/Art/...`) i izvan njega (`RawArt/` za radne `.kra` i Affinity predloške).
-6. **Izraditi custom Krita Python alate:**
-   - **Auto-Export plugin za pojedinačne sprajtove** (`.kra` arhiva + direktan `.png` export u Unity i update *File Layer* kompozicije).
-   - **1-Click `.psd` Exporter za likove** (kloniranje dokumenta u RAM-u -> *flatten* svih top-level grupa u layere -> export u `.psd` za Unity `2D PSD Importer`).
-7. **Složiti ComfyUI Batch Folder workflow** za AI restilizaciju pojedinačnih PNG-ova po folderima.
-8. **Postaviti Sorting Layere, paralaksu (1–2 forplana, glavni plan, do 8 planova pozadine) i `Cinemachine` kameru** s testnim `2×` zoom-inom u Unityju.
+> **TODO / Napomena za Asset Store:** Pretražiti i detaljno istražiti Unity Asset Store za navedene kategorije (posebice alate za *spline-based* platforme, *secondary motion* fiziku kostiju, 2D osvjetljenje/volumetrijsku maglu i gotove 2D URP shadere) prije izrade vlastitih custom rješenja. Sve otvorene zadatke za Art Pipeline i Narativ prati u dokumentu `Nikola TODO.md`.
 
 
 
