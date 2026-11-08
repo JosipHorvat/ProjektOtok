@@ -1,6 +1,6 @@
 using UnityEngine;
 
-/// <summary>Plays surface-aware footstep sounds from animation events.</summary>
+/// <summary>Plays surface-aware footsteps while the player moves on the ground.</summary>
 public sealed class PlayerFootstepSFX : MonoBehaviour
 {
     [Header("Surface Detection")]
@@ -19,7 +19,17 @@ public sealed class PlayerFootstepSFX : MonoBehaviour
     [SerializeField] private RandomAudioPlayer snowFootsteps;
     [SerializeField] private RandomAudioPlayer mudFootSteps;
 
+    [Header("Automatic Footstep Timing")]
+    [Tooltip("Minimum horizontal speed required to play grounded footsteps.")]
+    [SerializeField, Min(0f)] private float minimumMovementSpeed = 0.25f;
+    [Tooltip("Footstep interval while moving slowly.")]
+    [SerializeField, Min(0.05f)] private float slowStepInterval = 0.45f;
+    [Tooltip("Footstep interval at maximum horizontal speed.")]
+    [SerializeField, Min(0.05f)] private float fastStepInterval = 0.28f;
+
     private Player player;
+    private float stepTimer;
+    private bool wasMovingOnGround;
 
     private void Awake()
     {
@@ -33,6 +43,44 @@ public sealed class PlayerFootstepSFX : MonoBehaviour
         if (groundMask.value == 0 && player != null)
         {
             groundMask = player.whatIsGround;
+        }
+    }
+
+    private void Update()
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        float horizontalSpeed = player.rb != null
+            ? Mathf.Abs(player.rb.linearVelocity.x)
+            : 0f;
+        bool isMovingOnGround = player.HasGroundContact && horizontalSpeed >= minimumMovementSpeed;
+        if (!isMovingOnGround)
+        {
+            stepTimer = 0f;
+            wasMovingOnGround = false;
+            return;
+        }
+
+        float maximumSpeed = Mathf.Max(player.moveSpeed, 0.01f);
+        float normalizedSpeed = Mathf.Clamp01(horizontalSpeed / maximumSpeed);
+        float stepInterval = Mathf.Lerp(slowStepInterval, fastStepInterval, normalizedSpeed);
+
+        if (!wasMovingOnGround)
+        {
+            PlayFootstep();
+            stepTimer = 0f;
+            wasMovingOnGround = true;
+            return;
+        }
+
+        stepTimer += Time.deltaTime;
+        if (stepTimer >= stepInterval)
+        {
+            PlayFootstep();
+            stepTimer = 0f;
         }
     }
 
