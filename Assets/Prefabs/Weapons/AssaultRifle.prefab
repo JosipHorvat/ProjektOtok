@@ -25,7 +25,7 @@ Transform:
   m_GameObject: {fileID: 429117859904711293}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 2.05, y: 0.4, z: 0}
+  m_LocalPosition: {x: 0.95337105, y: 0.18602362, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -57,7 +57,7 @@ Transform:
   m_GameObject: {fileID: 704937931965166647}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.93, y: 0.03, z: 0}
+  m_LocalPosition: {x: 0.43250492, y: 0.013951772, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -148,7 +148,7 @@ Transform:
   m_GameObject: {fileID: 4972964058615783624}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.22, y: 0.3, z: 0}
+  m_LocalPosition: {x: 0.567372, y: 0.13951771, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -236,9 +236,9 @@ MonoBehaviour:
   mainGrip: {fileID: 5338526874707170907}
   supportGrip: {fileID: 6518164909665916840}
   muzzle: {fileID: 8467005301931946425}
-  aimHoldOffset: {x: 0.65, y: -0.45}
-  relaxedHoldOffset: {x: 0.52, y: -0.52}
-  runningHoldOffset: {x: 0.46, y: -0.48}
+  aimHoldOffset: {x: 0.29507133, y: -0.20428015}
+  relaxedHoldOffset: {x: 0.23605707, y: -0.23605707}
+  runningHoldOffset: {x: 0.20881972, y: -0.21789883}
   supportHand: 0
   relaxedAngle: -18
   runningAngle: -32
