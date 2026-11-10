@@ -24,6 +24,7 @@ public sealed class PlayerJumpState : PlayerState
         player.ResetJumpApexControl();
         jumpTime = 0f;
         jumpCut = false;
+        player.TriggerJumpTakeoffStretch();
 
         player.SetVerticalVelocity(player.jumpForce);
         player.CheckIfShouldFlip(InputDirection);
@@ -80,9 +81,11 @@ public sealed class PlayerJumpState : PlayerState
 
     private void Land()
     {
+        float impactSpeed = Mathf.Max(0f, -rb.linearVelocity.y);
+
         player.StopAtGround();
         player.MarkGrounded();
-        player.TriggerLandingSquash();
+        player.TriggerLandingSquash(impactSpeed);
 
         if (TryStartBufferedJump())
         {

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D), typeof(PlayerInputReader))]
@@ -9,6 +10,11 @@ public class Player : MonoBehaviour
     private const float MinimumTangentHorizontal = 0.01f;
     private const float GroundedVerticalVelocityThreshold = 0.1f;
     private const float JumpApexVelocityThreshold = 2.5f;
+    private const float LadderGrabInputDeadZone = 0.1f;
+    private const string OnLadderAnimatorParameter = "OnLadder";
+    private const string ClimbAnimatorParameter = "Climb";
+    private const string LadderAnimatorLayerName = "Ladder";
+    private const string LadderFacingRightAnimatorParameter = "LadderFacingRight";
 
     #endregion
 
@@ -20,6 +26,10 @@ public class Player : MonoBehaviour
 
     private CapsuleCollider2D capsuleCollider;
     private PlayerSquash playerSquash;
+    private WeaponHoldController weaponHoldController;
+    private LadderClimbVolume availableLadder;
+    private LadderClimbVolume activeLadder;
+    private readonly List<Collider2D> ladderIgnoredGroundColliders = new List<Collider2D>();
 
     #endregion
 
@@ -27,6 +37,7 @@ public class Player : MonoBehaviour
 
     [Header("Movement")]
     public float moveSpeed = 5f;
+    [SerializeField, Range(0.1f, 1f)] private float aimingMoveSpeedMultiplier = 0.75f;
     public float smoothMovement = 10f;
     public float acceleration = 120f;
     public float airDeceleration = 30f;
@@ -105,6 +116,7 @@ public class Player : MonoBehaviour
     private float jumpApexTimeRemaining;
     private bool jumpApexUsed;
     private bool jumpApexControlAvailable;
+    private bool suppressAirborneLadderGrabUntilClimbReleased;
     private readonly ContactPoint2D[] groundContacts = new ContactPoint2D[16];
 
     private GroundInfo currentGroundInfo;
@@ -129,6 +141,7 @@ public class Player : MonoBehaviour
     public PlayerMoveState moveState { get; private set; }
     public PlayerJumpState jumpState { get; private set; }
     public PlayerAirState airState { get; private set; }
+    public PlayerLadderState ladderState { get; private set; }
 
     #endregion
 
@@ -142,6 +155,16 @@ public class Player : MonoBehaviour
             : lastWalkableGroundInfo;
 
     public bool HasGroundContact => currentGroundInfo.HasGround;
+    public bool IsOnLadder => stateMachine != null && stateMachine.CurrentState == ladderState;
+    public bool CanGrabAvailableLadder =>
+        availableLadder != null &&
+        stateMachine != null &&
+        (stateMachine.CurrentState == idleState ||
+         stateMachine.CurrentState == moveState ||
+         stateMachine.CurrentState == jumpState ||
+         stateMachine.CurrentState == airState);
+    public CapsuleCollider2D BodyCollider => capsuleCollider;
+    public LadderClimbVolume ActiveLadder => activeLadder;
 
     #endregion
 
@@ -161,8 +184,12 @@ public class Player : MonoBehaviour
         stateMachine.Initialize(idleState);
     }
 
-    private void Update() =>
+    private void Update()
+    {
         stateMachine.CurrentState?.Update();
+        TryGrabNearbyLadder();
+        TryEnterNearbyLadder();
+    }
 
     private void FixedUpdate()
     {
@@ -188,8 +215,11 @@ public class Player : MonoBehaviour
             return;
         }
 
+        float impactSpeed = Mathf.Max(0f, -rb.linearVelocity.y);
+
         StopAtGround();
         MarkGrounded();
+        TriggerLandingSquash(impactSpeed);
 
         bool hasMovementInput = HasLiveMovementInput;
 
@@ -213,6 +243,206 @@ public class Player : MonoBehaviour
         rb.linearVelocity = new Vector2(
             rb.linearVelocity.x,
             velocityY);
+
+    /// <summary>Registers the ladder trigger currently overlapping this player.</summary>
+    public void SetAvailableLadder(LadderClimbVolume ladder)
+    {
+        availableLadder = ladder;
+    }
+
+    /// <summary>Clears a ladder trigger when its volume no longer overlaps this player.</summary>
+    public void ClearAvailableLadder(LadderClimbVolume ladder)
+    {
+        if (availableLadder == ladder)
+        {
+            availableLadder = null;
+        }
+    }
+
+    /// <summary>Aligns the player with the active ladder's climb lane.</summary>
+    public void AlignToLadder(LadderClimbVolume ladder)
+    {
+        if (ladder == null || rb == null)
+        {
+            return;
+        }
+
+        Vector2 limits = ladder.GetRootYLimits(this);
+        Vector2 position = rb.position;
+        position.x = ladder.GetPlayerRootX(this, facingDir);
+        position.y = ladder.GetNearestRungRootY(this);
+        position.y = Mathf.Clamp(position.y, limits.x, limits.y);
+        rb.position = position;
+    }
+
+    /// <summary>Enables or restores animation, IK, and weapon behavior for ladder traversal.</summary>
+    public void SetLadderVisualMode(bool isClimbing)
+    {
+        if (anim != null)
+        {
+            anim.SetBool(OnLadderAnimatorParameter, isClimbing);
+            anim.SetBool(LadderFacingRightAnimatorParameter, facingDir > 0);
+            anim.SetFloat(ClimbAnimatorParameter, 0f);
+
+            int ladderLayerIndex = anim.GetLayerIndex(LadderAnimatorLayerName);
+            if (ladderLayerIndex >= 0)
+            {
+                anim.SetLayerWeight(ladderLayerIndex, isClimbing ? 1f : 0f);
+            }
+        }
+
+        weaponHoldController?.SetLadderMode(isClimbing);
+        playerSquash?.SetLadderClimbing(isClimbing);
+    }
+
+    /// <summary>Ignores only ground colliders crossing the ladder lane while attached.</summary>
+    public void SetLadderGroundCollisionMode(bool ignoreGroundInLane)
+    {
+        if (capsuleCollider == null)
+        {
+            return;
+        }
+
+        if (ignoreGroundInLane)
+        {
+            ladderIgnoredGroundColliders.Clear();
+            if (activeLadder == null || whatIsGround.value == 0)
+            {
+                return;
+            }
+
+            Bounds ladderBounds = activeLadder.TriggerBounds;
+            Vector2 querySize = new Vector2(
+                ladderBounds.size.x + capsuleCollider.bounds.size.x,
+                ladderBounds.size.y);
+            Collider2D[] groundColliders = Physics2D.OverlapBoxAll(
+                ladderBounds.center,
+                querySize,
+                0f,
+                whatIsGround.value);
+
+            foreach (Collider2D groundCollider in groundColliders)
+            {
+                if (groundCollider == null || groundCollider == capsuleCollider || groundCollider.isTrigger)
+                {
+                    continue;
+                }
+
+                Physics2D.IgnoreCollision(capsuleCollider, groundCollider, true);
+                ladderIgnoredGroundColliders.Add(groundCollider);
+            }
+
+            return;
+        }
+
+        foreach (Collider2D groundCollider in ladderIgnoredGroundColliders)
+        {
+            if (groundCollider != null)
+            {
+                Physics2D.IgnoreCollision(capsuleCollider, groundCollider, false);
+            }
+        }
+
+        ladderIgnoredGroundColliders.Clear();
+    }
+
+    /// <summary>Prevents a still-held climb input from immediately reattaching after dismount.</summary>
+    public void SuppressAirborneLadderGrabUntilClimbReleased()
+    {
+        suppressAirborneLadderGrabUntilClimbReleased = true;
+    }
+
+    /// <summary>Releases the ladder reference after exiting or jumping away.</summary>
+    public void ReleaseActiveLadder()
+    {
+        activeLadder = null;
+    }
+
+    /// <summary>Dismounts at a ladder endpoint, clears ignored collisions, and resumes ground or air movement.</summary>
+    public void ExitLadderAtEndpoint(LadderClimbVolume ladder, float horizontalDirection)
+    {
+        if (ladder == null || rb == null || !IsOnLadder)
+        {
+            return;
+        }
+
+        SetLadderGroundCollisionMode(false);
+
+        Vector2 dismountPosition = rb.position;
+        dismountPosition.x = ladder.GetPlayerDismountRootX(this, horizontalDirection);
+        rb.position = dismountPosition;
+        rb.linearVelocity = Vector2.zero;
+        stateMachine.ChangeState(airState);
+    }
+
+    private void TryGrabNearbyLadder()
+    {
+        if (InputReader == null)
+        {
+            return;
+        }
+
+        bool climbUpHeld = InputReader.ClimbInput > LadderGrabInputDeadZone;
+        if (!climbUpHeld)
+        {
+            suppressAirborneLadderGrabUntilClimbReleased = false;
+        }
+
+        if (!CanGrabAvailableLadder)
+        {
+            return;
+        }
+
+        bool explicitGrabPressed = InputReader.ExplicitLadderGrabPressedThisFrame;
+        bool climbUpPressed = InputReader.ClimbUpPressedThisFrame &&
+                              !suppressAirborneLadderGrabUntilClimbReleased;
+        bool heldWhileAirborne =
+            (stateMachine.CurrentState == jumpState || stateMachine.CurrentState == airState) &&
+            climbUpHeld &&
+            !suppressAirborneLadderGrabUntilClimbReleased;
+
+        if (!explicitGrabPressed && !climbUpPressed && !heldWhileAirborne)
+        {
+            return;
+        }
+
+        AttachToLadder(availableLadder);
+    }
+
+    private void TryEnterNearbyLadder()
+    {
+        if (IsOnLadder || !HasGroundContact || availableLadder == null || InputReader == null ||
+            (stateMachine.CurrentState != idleState && stateMachine.CurrentState != moveState))
+        {
+            return;
+        }
+
+        float climbInput = InputReader.ClimbInput;
+        if (Mathf.Abs(climbInput) <= PlayerState.HorizontalInputThreshold ||
+            !availableLadder.CanEnter(this, climbInput))
+        {
+            return;
+        }
+
+        AttachToLadder(availableLadder);
+    }
+
+    private void AttachToLadder(LadderClimbVolume ladder)
+    {
+        if (ladder == null)
+        {
+            return;
+        }
+
+        activeLadder = ladder;
+        int ladderDirection = ladder.GetFacingDirectionToLadder(this);
+        if (ladderDirection != 0)
+        {
+            SetFacingDirection(ladderDirection);
+        }
+
+        stateMachine.ChangeState(ladderState);
+    }
 
     public void SetZeroVelocity() =>
         rb.linearVelocity = Vector2.zero;
@@ -243,14 +473,15 @@ public class Player : MonoBehaviour
         }
 
         Vector2 tangent = CurrentGroundInfo.Tangent;
+        float currentMoveSpeed = GetGroundMoveSpeed();
 
         float targetHorizontalVelocity =
-            horizontalInput * moveSpeed;
+            horizontalInput * currentMoveSpeed;
 
         float horizontalVelocity = Mathf.MoveTowards(
             rb.linearVelocity.x,
             targetHorizontalVelocity,
-            smoothMovement * moveSpeed * Time.fixedDeltaTime);
+            smoothMovement * currentMoveSpeed * Time.fixedDeltaTime);
 
         float tangentHorizontal = Mathf.Max(
             Mathf.Abs(tangent.x),
@@ -269,6 +500,13 @@ public class Player : MonoBehaviour
         rb.linearVelocity = new Vector2(
             horizontalVelocity,
             slopeVerticalVelocity);
+    }
+
+    private float GetGroundMoveSpeed()
+    {
+        bool isAiming = InputReader != null && InputReader.FocusAimHeld;
+        float speedMultiplier = isAiming ? aimingMoveSpeedMultiplier : 1f;
+        return moveSpeed * speedMultiplier;
     }
 
     public void ApplyAirMovement(float horizontalInput)
@@ -423,8 +661,16 @@ public class Player : MonoBehaviour
 
     #region Animation and Interaction
 
-    public void TriggerLandingSquash() =>
-        playerSquash?.TriggerSquash();
+    public void TriggerJumpTakeoffStretch()
+    {
+        playerSquash?.TriggerJumpTakeoff();
+    }
+
+    /// <summary>Plays the landing squash, scaled by how fast the player hit the ground.</summary>
+    public void TriggerLandingSquash(float impactSpeed)
+    {
+        playerSquash?.TriggerSquash(impactSpeed);
+    }
 
     public float GetAnimationVerticalVelocity() =>
         HasGroundContact
@@ -463,6 +709,11 @@ public class Player : MonoBehaviour
                 this,
                 stateMachine,
                 "Jump");
+
+        ladderState =
+            new PlayerLadderState(
+                this,
+                stateMachine);
     }
 
     private void CacheComponents()
@@ -472,6 +723,14 @@ public class Player : MonoBehaviour
 
         playerSquash =
             GetComponentInChildren<PlayerSquash>();
+
+        weaponHoldController =
+            GetComponentInChildren<WeaponHoldController>();
+
+        if (playerSquash == null)
+        {
+            Debug.LogWarning("Player has no PlayerSquash in its children; squash and stretch is disabled.", this);
+        }
 
         rb =
             GetComponent<Rigidbody2D>();

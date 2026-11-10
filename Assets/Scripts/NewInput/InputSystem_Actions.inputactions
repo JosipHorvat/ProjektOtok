@@ -117,6 +117,16 @@
                     "priority": 0
                 },
                 {
+                    "name": "GrabLadder",
+                    "type": "Button",
+                    "id": "9c7c18d2-7c95-4ab9-8948-6cbf34cdfa81",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false,
+                    "priority": 0
+                },
+                {
                     "name": "UseHealingItem",
                     "type": "Button",
                     "id": "54db4aca-9113-4fd2-8cba-8c4f7178738c",
@@ -637,6 +647,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "SelectNextEquipment",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2de1398f-f401-45d5-893f-c94f43fd950c",
+                    "path": "<Keyboard>/2",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "GrabLadder",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

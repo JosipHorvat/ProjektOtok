@@ -588,6 +588,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f14b754603d2794db5b2d0e805683e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInputReader
+  logInputDebug: 1
 --- !u!70 &5442267993439181621
 CapsuleCollider2D:
   m_ObjectHideFlags: 0
@@ -943,42 +944,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c76baf62eff6cfd4f929c9e40facf7b9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSquash
-  squashScaleX: 1.25
-  squashScaleY: 0.75
-  duration: 0.25
-  recoveryCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 4
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 0.55
-      value: 1.1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
+  ascentStretchY: 0.16
+  ascentCompressX: 0.08
+  fullAscentStretchSpeed: 10
+  ascentResponse: 9
+  apexSquashY: 0.09
+  apexWidenX: 0.07
+  apexVelocityBand: 4.5
+  apexResponse: 14
+  fallStretchY: 0.19
+  fallCompressX: 0.09
+  fullFallStretchSpeed: 12
+  fallResponse: 16
+  landingSquashY: 0.28
+  landingWidenX: 0.2
+  minimumLandingIntensity: 0.5
+  lightImpactSpeed: 3
+  heavyImpactSpeed: 16
+  landingDuration: 0.42
+  landingFrequency: 3.1
+  landingDamping: 8
+  pinScaleToFeet: 1
 --- !u!114 &2470665454757718780
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -993,6 +979,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSlopeVisuals
   maximumVisualTilt: 12
   tiltSmoothTime: 0.08
+  maximumForwardLean: 2.5
 --- !u!82 &8891393954572045929
 AudioSource:
   m_ObjectHideFlags: 0
@@ -1131,6 +1118,9 @@ MonoBehaviour:
   metalFootsteps: {fileID: 2423395203717089174}
   snowFootsteps: {fileID: 4898381611931528167}
   mudFootSteps: {fileID: 5651545170161830363}
+  minimumMovementSpeed: 0.25
+  slowStepInterval: 0.45
+  fastStepInterval: 0.28
 --- !u!1 &4440845588423187547
 GameObject:
   m_ObjectHideFlags: 0

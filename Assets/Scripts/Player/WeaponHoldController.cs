@@ -147,6 +147,17 @@ public sealed class WeaponHoldController : MonoBehaviour
     [SerializeField]
     private HeldWeapon[] testWeapons;
 
+    [Header("Ladder weapon stow")]
+    [SerializeField] private Vector3 ladderBackLocalPosition = new Vector3(-0.14f, 0.04f, 0f);
+    [SerializeField] private float ladderBackLocalRotation = 60f;
+
+    private bool isLadderMode;
+    private Transform weaponParentBeforeLadder;
+    private Vector3 weaponPositionBeforeLadder;
+    private Quaternion weaponRotationBeforeLadder;
+    private Vector3 weaponScaleBeforeLadder;
+
+
     private int testWeaponIndex = -1;
 
     private Animator animator;
@@ -246,6 +257,17 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (isLadderMode)
+        {
+            if (animator != null)
+            {
+                animator.SetBool(AimAnimatorParameter, false);
+            }
+
+            SetArmWeights(1f, 1f, false);
+            return;
+        }
+
         bool isAiming = currentWeapon != null && inputReader != null && inputReader.FocusAimHeld;
 
         float horizontalSpeed = player != null && player.rb != null
@@ -398,6 +420,65 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         Destroy(currentWeapon.gameObject);
         currentWeapon = null;
+    }
+
+    /// <summary>Moves the equipped weapon to the character's back and frees the hands for ladder poses.</summary>
+    public void SetLadderMode(bool isClimbing)
+    {
+        if (isLadderMode == isClimbing)
+        {
+            return;
+        }
+
+        isLadderMode = isClimbing;
+        if (wasAiming && aimHead != null && hasHeadBaseLocalRotation)
+        {
+            aimHead.localRotation = headBaseLocalRotation;
+        }
+
+        wasAiming = false;
+
+        if (isLadderMode)
+        {
+            if (currentWeapon != null)
+            {
+                weaponParentBeforeLadder = currentWeapon.transform.parent;
+                weaponPositionBeforeLadder = currentWeapon.transform.localPosition;
+                weaponRotationBeforeLadder = currentWeapon.transform.localRotation;
+                weaponScaleBeforeLadder = currentWeapon.transform.localScale;
+
+                Transform backSocket = transform.Find("root/pelvis/abdomen/chest");
+                if (backSocket == null)
+                {
+                    backSocket = transform;
+                }
+
+                currentWeapon.transform.SetParent(backSocket, false);
+                currentWeapon.transform.localPosition = ladderBackLocalPosition;
+                currentWeapon.transform.localRotation = Quaternion.Euler(0f, 0f, ladderBackLocalRotation);
+                currentWeapon.transform.localScale = weaponScaleBeforeLadder;
+            }
+
+            if (animator != null)
+            {
+                animator.SetBool(AimAnimatorParameter, false);
+            }
+
+            SetArmWeights(1f, 1f, true);
+            return;
+        }
+
+        if (currentWeapon != null && weaponParentBeforeLadder != null)
+        {
+            currentWeapon.transform.SetParent(weaponParentBeforeLadder, false);
+            currentWeapon.transform.localPosition = weaponPositionBeforeLadder;
+            currentWeapon.transform.localRotation = weaponRotationBeforeLadder;
+            currentWeapon.transform.localScale = weaponScaleBeforeLadder;
+            PlaceHandTargets();
+        }
+
+        weaponParentBeforeLadder = null;
+        SetArmWeights(currentWeapon != null ? 1f : 0f, 0f, true);
     }
 
     private void BeginAimIfNeeded()

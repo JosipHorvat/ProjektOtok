@@ -6,9 +6,12 @@ using UnityEngine.InputSystem;
 public sealed class PlayerInputReader : MonoBehaviour
 {
     private InputSystem_Actions inputActions;
+    private InputAction grabLadderAction;
+    private Player player;
     private Vector2 moveInput;
     private float lastJumpPressedTime = float.NegativeInfinity;
     private float previousClimbInput;
+    private bool climbUpPressedThisFrame;
 
     [SerializeField]
     private bool logInputDebug = true;
@@ -18,31 +21,31 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     /// <summary>Raw mouse screen position or gamepad right-stick aim input.</summary>
     public Vector2 AimInput =>
-        CanReadGameplayInput && inputActions != null
+        CanUseCombatInput && inputActions != null
             ? inputActions.Player.Aim.ReadValue<Vector2>()
             : Vector2.zero;
 
     /// <summary>Returns true while the Fire/Throw action is held.</summary>
     public bool FireThrowHeld =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.FireThrow.IsPressed();
 
     /// <summary>Returns true during the frame in which Fire/Throw is pressed.</summary>
     public bool FireThrowPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.FireThrow.WasPressedThisFrame();
 
     /// <summary>Returns true while Focus Aim is held.</summary>
     public bool FocusAimHeld =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.FocusAim.IsPressed();
 
     /// <summary>Returns true during the frame in which Focus Aim is pressed.</summary>
     public bool FocusAimPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.FocusAim.WasPressedThisFrame();
 
@@ -54,25 +57,25 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     /// <summary>Returns true during the frame in which Reload is pressed.</summary>
     public bool ReloadPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.Reload.WasPressedThisFrame();
 
     /// <summary>Returns true during the frame in which Melee Attack is pressed.</summary>
     public bool MeleeAttackPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.MeleeAttack.WasPressedThisFrame();
 
     /// <summary>Returns true while Quick Step is held.</summary>
     public bool QuickStepHeld =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.QuickStep.IsPressed();
 
     /// <summary>Returns true during the frame in which Quick Step is pressed.</summary>
     public bool QuickStepPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.QuickStep.WasPressedThisFrame();
 
@@ -82,39 +85,56 @@ public sealed class PlayerInputReader : MonoBehaviour
             ? inputActions.Player.Climb.ReadValue<float>()
             : 0f;
 
+    /// <summary>Returns true during the frame in which the upward climb input is pressed.</summary>
+    public bool ClimbUpPressedThisFrame =>
+        CanReadGameplayInput && climbUpPressedThisFrame;
+
     /// <summary>Returns true during the frame in which Interact is pressed.</summary>
     public bool InteractPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.Interact.WasPressedThisFrame();
 
     /// <summary>Returns true while Interact is held.</summary>
     public bool InteractHeld =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.Interact.IsPressed();
 
     /// <summary>Returns true during the frame in which the healing-item action is pressed.</summary>
     public bool UseHealingItemPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.UseHealingItem.WasPressedThisFrame();
 
+    /// <summary>Returns true when the direct ladder-grab key is pressed in a valid ladder overlap.</summary>
+    public bool ExplicitLadderGrabPressedThisFrame =>
+        IsLadderGrabBindingPressed &&
+        player != null &&
+        player.CanGrabAvailableLadder;
+
+    /// <summary>Returns true when either the direct grab key or upward climb input requests attachment.</summary>
+    public bool GrabLadderPressedThisFrame =>
+        (IsLadderGrabBindingPressed || ClimbUpPressedThisFrame) &&
+        player != null &&
+        player.CanGrabAvailableLadder;
+
     /// <summary>Returns true during the frame in which previous equipment is selected.</summary>
     public bool SelectPreviousEquipmentPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
         inputActions.Player.SelectPreviousEquipment.WasPressedThisFrame();
 
     /// <summary>Returns true during the frame in which next equipment is selected.</summary>
     public bool SelectNextEquipmentPressedThisFrame =>
-        CanReadGameplayInput &&
+        CanUseCombatInput &&
         inputActions != null &&
-        inputActions.Player.SelectNextEquipment.WasPressedThisFrame();
+        inputActions.Player.SelectNextEquipment.WasPressedThisFrame() &&
+        !GrabLadderPressedThisFrame;
 
     /// <summary>Returns mouse-wheel input for equipment selection.</summary>
     public Vector2 ScrollEquipmentInput =>
-        CanReadGameplayInput && inputActions != null
+        CanUseCombatInput && inputActions != null
             ? inputActions.Player.ScrollEquipment.ReadValue<Vector2>()
             : Vector2.zero;
 
@@ -151,9 +171,20 @@ public sealed class PlayerInputReader : MonoBehaviour
         GameManager.Instance == null ||
         !GameManager.Instance.IsGameplayInputLocked;
 
+    private bool CanUseCombatInput =>
+        CanReadGameplayInput &&
+        (player == null || !player.IsOnLadder);
+
+    private bool IsLadderGrabBindingPressed =>
+        CanReadGameplayInput &&
+        grabLadderAction != null &&
+        grabLadderAction.WasPressedThisFrame();
+
     private void Awake()
     {
+        player = GetComponent<Player>();
         inputActions = new InputSystem_Actions();
+        grabLadderAction = inputActions.asset.FindAction("Player/GrabLadder", false);
         inputActions.Player.Aim.started += OnAimStarted;
     }
 
@@ -240,6 +271,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         SetMoveInput(Vector2.zero);
         previousClimbInput = 0f;
+        climbUpPressedThisFrame = false;
         ConsumeJumpBuffer();
     }
 
@@ -256,6 +288,10 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void UpdateClimbInput()
     {
         float climbInput = inputActions.Player.Climb.ReadValue<float>();
+        const float climbPressThreshold = 0.1f;
+        climbUpPressedThisFrame =
+            climbInput > climbPressThreshold &&
+            previousClimbInput <= climbPressThreshold;
 
         if (Mathf.Approximately(previousClimbInput, 0f) && !Mathf.Approximately(climbInput, 0f))
         {

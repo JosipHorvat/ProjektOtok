@@ -55,9 +55,11 @@ public sealed class PlayerAirState : PlayerState
             return false;
         }
 
+        float impactSpeed = Mathf.Max(0f, -rb.linearVelocity.y);
+
         player.StopAtGround();
         player.MarkGrounded();
-        player.TriggerLandingSquash();
+        player.TriggerLandingSquash(impactSpeed);
 
         if (TryStartBufferedJump())
         {

@@ -203,6 +203,16 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""priority"": 0
                 },
                 {
+                    ""name"": ""GrabLadder"",
+                    ""type"": ""Button"",
+                    ""id"": ""9c7c18d2-7c95-4ab9-8948-6cbf34cdfa81"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false,
+                    ""priority"": 0
+                },
+                {
                     ""name"": ""UseHealingItem"",
                     ""type"": ""Button"",
                     ""id"": ""54db4aca-9113-4fd2-8cba-8c4f7178738c"",
@@ -723,6 +733,17 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""groups"": ""Keyboard&Mouse"",
                     ""action"": ""SelectNextEquipment"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""2de1398f-f401-45d5-893f-c94f43fd950c"",
+                    ""path"": ""<Keyboard>/2"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""GrabLadder"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -1397,6 +1418,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         m_Player_MeleeAttack = m_Player.FindAction("MeleeAttack", throwIfNotFound: true);
         m_Player_QuickStep = m_Player.FindAction("QuickStep", throwIfNotFound: true);
         m_Player_Climb = m_Player.FindAction("Climb", throwIfNotFound: true);
+        m_Player_GrabLadder = m_Player.FindAction("GrabLadder", throwIfNotFound: true);
         m_Player_UseHealingItem = m_Player.FindAction("UseHealingItem", throwIfNotFound: true);
         m_Player_SelectPreviousEquipment = m_Player.FindAction("SelectPreviousEquipment", throwIfNotFound: true);
         m_Player_SelectNextEquipment = m_Player.FindAction("SelectNextEquipment", throwIfNotFound: true);
@@ -1507,6 +1529,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_MeleeAttack;
     private readonly InputAction m_Player_QuickStep;
     private readonly InputAction m_Player_Climb;
+    private readonly InputAction m_Player_GrabLadder;
     private readonly InputAction m_Player_UseHealingItem;
     private readonly InputAction m_Player_SelectPreviousEquipment;
     private readonly InputAction m_Player_SelectNextEquipment;
@@ -1568,6 +1591,10 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/Climb".
         /// </summary>
         public InputAction @Climb => m_Wrapper.m_Player_Climb;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/GrabLadder".
+        /// </summary>
+        public InputAction @GrabLadder => m_Wrapper.m_Player_GrabLadder;
         /// <summary>
         /// Provides access to the underlying input action "Player/UseHealingItem".
         /// </summary>
@@ -1651,6 +1678,9 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
             @Climb.started += instance.OnClimb;
             @Climb.performed += instance.OnClimb;
             @Climb.canceled += instance.OnClimb;
+            @GrabLadder.started += instance.OnGrabLadder;
+            @GrabLadder.performed += instance.OnGrabLadder;
+            @GrabLadder.canceled += instance.OnGrabLadder;
             @UseHealingItem.started += instance.OnUseHealingItem;
             @UseHealingItem.performed += instance.OnUseHealingItem;
             @UseHealingItem.canceled += instance.OnUseHealingItem;
@@ -1713,6 +1743,9 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
             @Climb.started -= instance.OnClimb;
             @Climb.performed -= instance.OnClimb;
             @Climb.canceled -= instance.OnClimb;
+            @GrabLadder.started -= instance.OnGrabLadder;
+            @GrabLadder.performed -= instance.OnGrabLadder;
+            @GrabLadder.canceled -= instance.OnGrabLadder;
             @UseHealingItem.started -= instance.OnUseHealingItem;
             @UseHealingItem.performed -= instance.OnUseHealingItem;
             @UseHealingItem.canceled -= instance.OnUseHealingItem;
@@ -2108,6 +2141,13 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnClimb(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "GrabLadder" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnGrabLadder(InputAction.CallbackContext context);
         /// <summary>
         /// Method invoked when associated input action "UseHealingItem" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>

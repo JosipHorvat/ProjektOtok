@@ -137,7 +137,7 @@ public sealed class PlayerLocomotionIKController : MonoBehaviour
             strideBlendSmoothTime);
         ApplySolverSettings();
 
-        if (!isGrounded)
+        if (player.IsOnLadder || !isGrounded)
         {
             return;
         }
