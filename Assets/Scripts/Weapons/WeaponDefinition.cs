@@ -18,6 +18,12 @@ public sealed class WeaponDefinition : ScriptableObject
         Shotgun = 3,
     }
 
+    public enum ReloadStyle
+    {
+        MagazineSwap = 0,
+        RoundByRound = 1,
+    }
+
     [Header("Ranged weapon stats")]
     public FireMode fireMode = FireMode.SemiAutomatic;
     public AmmunitionType ammunitionType = AmmunitionType.Pistol;
@@ -66,6 +72,22 @@ public sealed class WeaponDefinition : ScriptableObject
     public string semiAutomaticFireTrigger = "Fire";
     [Tooltip("Animator bool held while an automatic weapon is actively firing.")]
     public string automaticFireBool = "Firing";
+
+    [Header("Reload")]
+    [Tooltip("MagazineSwap replaces the magazine at one animation event. RoundByRound transfers one round per insertion event.")]
+    public ReloadStyle reloadStyle = ReloadStyle.MagazineSwap;
+    [Tooltip("Duration, in seconds, of the complete magazine-swap reload animation.")]
+    [Min(0.05f)] public float reloadDuration = 2f;
+    [Tooltip("Duration, in seconds, of one round-insertion animation loop.")]
+    [Min(0.05f)] public float roundInsertInterval = 0.5f;
+    [Tooltip("Animator trigger used to start a magazine-swap reload.")]
+    public string magazineReloadTrigger = "ReloadMagazine";
+    [Tooltip("Animator trigger used to start a round-by-round reload.")]
+    public string roundByRoundReloadTrigger = "ReloadRoundByRound";
+    [Tooltip("Animator float parameter used only to scale the active reload state.")]
+    public string reloadSpeedParameter = "ReloadSpeed";
+    [Tooltip("Animator trigger used to leave an interrupted or completed reload state.")]
+    public string reloadCancelTrigger = "ReloadComplete";
 
     [Header("Future inventory data")]
     public Sprite inventoryIcon;
@@ -130,9 +152,31 @@ public sealed class WeaponDefinition : ScriptableObject
 
     public float ShellSpinDegreesPerSecond => shellSpinDegreesPerSecond > 0f ? shellSpinDegreesPerSecond : 720f;
 
+
+    private void OnValidate()
+    {
+        reloadDuration = Mathf.Max(0.05f, reloadDuration);
+        roundInsertInterval = Mathf.Max(0.05f, roundInsertInterval);
+        magazineCapacity = Mathf.Max(1, magazineCapacity);
+    }
+
     public string SemiAutomaticFireTrigger => semiAutomaticFireTrigger;
 
     public string AutomaticFireBool => automaticFireBool;
+
+    public ReloadStyle ReloadingStyle => reloadStyle;
+
+    public float ReloadDuration => Mathf.Max(0.05f, reloadDuration);
+
+    public float RoundInsertInterval => Mathf.Max(0.05f, roundInsertInterval);
+
+    public string MagazineReloadTrigger => magazineReloadTrigger;
+
+    public string RoundByRoundReloadTrigger => roundByRoundReloadTrigger;
+
+    public string ReloadSpeedParameter => reloadSpeedParameter;
+
+    public string ReloadCancelTrigger => reloadCancelTrigger;
 
     public Sprite InventoryIcon => inventoryIcon;
 

@@ -13,6 +13,8 @@ public sealed class WeaponFireController : MonoBehaviour
 
     public WeaponHoldController weaponHoldController;
 
+    public PlayerReloadController reloadController;
+
     public Animator animator;
 
     public Camera aimCamera;
@@ -59,6 +61,11 @@ public sealed class WeaponFireController : MonoBehaviour
         if (weaponHoldController == null)
         {
             weaponHoldController = GetComponentInChildren<WeaponHoldController>();
+        }
+
+        if (reloadController == null)
+        {
+            reloadController = GetComponentInChildren<PlayerReloadController>();
         }
 
         if (animator == null)
@@ -168,6 +175,13 @@ public sealed class WeaponFireController : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (reloadController != null && reloadController.IsReloading)
+        {
+            ClearPendingShot();
+            ClearAutomaticFireParameter();
+            return;
+        }
+
         if (!hasPendingShot || pendingShotWeapon == null || pendingShotDefinition == null || IsBlocked())
         {
             return;
@@ -210,10 +224,17 @@ public sealed class WeaponFireController : MonoBehaviour
         pendingShotDefinition = null;
     }
 
+    /// <summary>Clears staged shots and automatic-fire feedback as soon as a reload starts.</summary>
+    public void NotifyReloadStarted()
+    {
+        ClearPendingShot();
+        ClearAutomaticFireParameter();
+    }
 
     private bool IsBlocked()
     {
-        return player != null && player.IsOnLadder;
+        return (player != null && player.IsOnLadder) ||
+               (reloadController != null && reloadController.IsReloading);
     }
 
     private bool FireOneShot(HeldWeapon weapon, WeaponDefinition definition, WeaponAmmoState ammoState)

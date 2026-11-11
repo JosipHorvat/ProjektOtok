@@ -45,6 +45,13 @@ MonoBehaviour:
   shellSpinDegreesPerSecond: 720
   semiAutomaticFireTrigger: Fire
   automaticFireBool: Firing
+  reloadStyle: 0
+  reloadDuration: 1.7
+  roundInsertInterval: 0.5
+  magazineReloadTrigger: ReloadPistol
+  roundByRoundReloadTrigger: ReloadRoundByRound
+  reloadSpeedParameter: ReloadSpeed
+  reloadCancelTrigger: ReloadComplete
   inventoryIcon: {fileID: 21300000, guid: 536a473fa9adb1146982141e54963433, type: 3}
   inventoryWidth: 1
   inventoryHeight: 2

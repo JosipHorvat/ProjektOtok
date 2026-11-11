@@ -163,6 +163,7 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private Animator animator;
     private Player player;
+    private PlayerReloadController reloadController;
     private HeldWeapon currentWeapon;
     private WeaponAmmoState currentAmmoState;
     private readonly Dictionary<int, WeaponAmmoState> quickSlotAmmoStates = new Dictionary<int, WeaponAmmoState>();
@@ -232,6 +233,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         player = GetComponentInParent<Player>();
+        reloadController = GetComponent<PlayerReloadController>();
 
         if (aimCamera == null)
         {
@@ -306,6 +308,25 @@ public sealed class WeaponHoldController : MonoBehaviour
             }
 
             SetArmWeights(1f, 1f, false);
+            return;
+        }
+
+        if (reloadController != null && reloadController.IsReloading)
+        {
+            aimPoseReady = false;
+            if (wasAiming && aimHead != null && hasHeadBaseLocalRotation)
+            {
+                aimHead.localRotation = headBaseLocalRotation;
+            }
+
+            wasAiming = false;
+            hasHeadBaseLocalRotation = false;
+            if (animator != null)
+            {
+                animator.SetBool(AimAnimatorParameter, false);
+            }
+
+            BlendArmWeights(0f, 0f);
             return;
         }
 
@@ -470,6 +491,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Removes the held weapon; arms fall back to animation.</summary>
     public void Unequip()
     {
+        reloadController?.CancelReload();
         currentAmmoState = null;
         if (currentWeapon == null)
         {
@@ -521,6 +543,11 @@ public sealed class WeaponHoldController : MonoBehaviour
         if (isLadderMode == isClimbing)
         {
             return;
+        }
+
+        if (isClimbing)
+        {
+            reloadController?.CancelReload();
         }
 
         isLadderMode = isClimbing;
@@ -833,6 +860,7 @@ public sealed class WeaponHoldController : MonoBehaviour
         }
 
         int quickSlotCount = Mathf.Min(testWeapons.Length, 2);
+        int weaponCycleCount = testWeapons.Length;
         if (quickSlotIndex >= 0)
         {
             if (quickSlotIndex < quickSlotCount)
@@ -863,7 +891,7 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
-        testWeaponIndex = (testWeaponIndex + step + quickSlotCount) % quickSlotCount;
+        testWeaponIndex = (testWeaponIndex + step + weaponCycleCount) % weaponCycleCount;
         Equip(testWeapons[testWeaponIndex]);
     }
 }

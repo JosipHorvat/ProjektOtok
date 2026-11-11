@@ -1432,6 +1432,7 @@ GameObject:
   - component: {fileID: 930068575}
   - component: {fileID: 930068574}
   - component: {fileID: 930068577}
+  - component: {fileID: 930068578}
   m_Layer: 9
   m_Name: Player
   m_TagString: Untagged
@@ -1572,7 +1573,7 @@ MonoBehaviour:
   coyoteTime: 0.1
   jumpBufferTime: 0.15
   jumpCutVelocityMultiplier: 0.4
-  groundCheck: {fileID: 0}
+  groundCheck: {fileID: 4410506484648797861}
   groundCheckDistance: 0.02
   groundCheckSize: {x: 0.42671853, y: 0.04085603}
   whatIsGround:
@@ -1738,9 +1739,29 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WeaponFireController
   inputReader: {fileID: 930068572}
   weaponHoldController: {fileID: 7505100604846629297}
+  reloadController: {fileID: 7505100604846629299}
   animator: {fileID: 7505100604846629294}
   aimCamera: {fileID: 0}
   logShotDebug: 1
+--- !u!114 &930068578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 930068568}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 329d23a4c92403f4d8164ba9c49f33a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAmmoInventory
+  startingReserves:
+  - ammunitionType: 1
+    rounds: 160
+  - ammunitionType: 2
+    rounds: 240
+  - ammunitionType: 3
+    rounds: 32
 --- !u!1 &931254159
 GameObject:
   m_ObjectHideFlags: 0
@@ -17872,6 +17893,7 @@ GameObject:
   - component: {fileID: 7505100604846629295}
   - component: {fileID: 7505100604846629297}
   - component: {fileID: 7505100604846629298}
+  - component: {fileID: 7505100604846629299}
   m_Layer: 0
   m_Name: PlayerAnimator
   m_TagString: Untagged
@@ -19316,6 +19338,7 @@ MonoBehaviour:
   testWeapons:
   - {fileID: 2764866594269475709, guid: 52e08938b16080642af576dcb3ac5fc2, type: 3}
   - {fileID: 5516920847647293125, guid: 28f007e68a670154eb3f705fd62203d3, type: 3}
+  - {fileID: 2893296440701670194, guid: baeaa3d793809b3499e8fd2e40f89901, type: 3}
   ladderBackLocalPosition: {x: -0.14, y: 0.04, z: 0}
   ladderBackLocalRotation: 60
 --- !u!114 &7505100604846629298
@@ -19346,6 +19369,18 @@ MonoBehaviour:
   swingFraction: 0.4
   hipBounceAmplitude: 0.015888456
   strideBlendSmoothTime: 0.12
+--- !u!114 &7505100604846629299
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6484738859659621021}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed6d957052eef4f43a18b8dfdb31b404, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerReloadController
 --- !u!4 &7531224903428343667
 Transform:
   m_ObjectHideFlags: 0
