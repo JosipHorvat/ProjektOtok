@@ -55,6 +55,11 @@ public sealed class PlayerInputReader : MonoBehaviour
         inputActions != null &&
         inputActions.Player.FocusAim.activeControl?.device is Gamepad;
 
+    /// <summary>Returns true when the current aim input comes from a gamepad.</summary>
+    public bool AimUsesGamepad =>
+        inputActions != null &&
+        inputActions.Player.Aim.activeControl?.device is Gamepad;
+
     /// <summary>Returns true during the frame in which Reload is pressed.</summary>
     public bool ReloadPressedThisFrame =>
         CanUseCombatInput &&
@@ -119,6 +124,18 @@ public sealed class PlayerInputReader : MonoBehaviour
         player != null &&
         player.CanGrabAvailableLadder;
 
+    /// <summary>Returns true during the frame in which quick slot 1 is selected.</summary>
+    public bool SelectQuickSlot1PressedThisFrame =>
+        CanUseCombatInput &&
+        inputActions != null &&
+        inputActions.Player.SelectQuickSlot1.WasPressedThisFrame();
+
+    /// <summary>Returns true during the frame in which quick slot 2 is selected.</summary>
+    public bool SelectQuickSlot2PressedThisFrame =>
+        CanUseCombatInput &&
+        inputActions != null &&
+        inputActions.Player.SelectQuickSlot2.WasPressedThisFrame();
+
     /// <summary>Returns true during the frame in which previous equipment is selected.</summary>
     public bool SelectPreviousEquipmentPressedThisFrame =>
         CanUseCombatInput &&
@@ -129,8 +146,23 @@ public sealed class PlayerInputReader : MonoBehaviour
     public bool SelectNextEquipmentPressedThisFrame =>
         CanUseCombatInput &&
         inputActions != null &&
-        inputActions.Player.SelectNextEquipment.WasPressedThisFrame() &&
-        !GrabLadderPressedThisFrame;
+        inputActions.Player.SelectNextEquipment.WasPressedThisFrame();
+
+    /// <summary>Returns -1 or 1 when the mouse wheel requests previous or next equipment.</summary>
+    public int EquipmentScrollDirection
+    {
+        get
+        {
+            if (!CanUseCombatInput || inputActions == null ||
+                !inputActions.Player.ScrollEquipment.WasPerformedThisFrame())
+            {
+                return 0;
+            }
+
+            float scroll = inputActions.Player.ScrollEquipment.ReadValue<Vector2>().y;
+            return scroll > 0f ? 1 : scroll < 0f ? -1 : 0;
+        }
+    }
 
     /// <summary>Returns mouse-wheel input for equipment selection.</summary>
     public Vector2 ScrollEquipmentInput =>
@@ -246,6 +278,8 @@ public sealed class PlayerInputReader : MonoBehaviour
         LogButtonState(inputActions.Player.QuickStep, "Dodge / Quick Step", true);
         LogButtonState(inputActions.Player.Interact, "Interact / Pick Up");
         LogButtonState(inputActions.Player.UseHealingItem, "Use Healing Item");
+        LogButtonState(inputActions.Player.SelectQuickSlot1, "Select Quick Slot 1");
+        LogButtonState(inputActions.Player.SelectQuickSlot2, "Select Quick Slot 2");
         LogButtonState(inputActions.Player.SelectPreviousEquipment, "Select Previous Equipment");
         LogButtonState(inputActions.Player.SelectNextEquipment, "Select Next Equipment");
         LogButtonState(inputActions.Player.OpenInventory, "Open Inventory");

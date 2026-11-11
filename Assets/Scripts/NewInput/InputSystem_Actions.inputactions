@@ -157,6 +157,26 @@
                     "priority": 0
                 },
                 {
+                    "name": "SelectQuickSlot1",
+                    "type": "Button",
+                    "id": "ab679401-4d0c-44de-89e1-29a2e114ff01",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false,
+                    "priority": 0
+                },
+                {
+                    "name": "SelectQuickSlot2",
+                    "type": "Button",
+                    "id": "31f4e192-85c9-4e7a-86d3-d3df03a9e1c4",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false,
+                    "priority": 0
+                },
+                {
                     "name": "ScrollEquipment",
                     "type": "PassThrough",
                     "id": "50d1117b-4dc1-458e-9c90-05756d5d426d",
@@ -624,7 +644,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "SelectPreviousEquipment",
+                    "action": "SelectQuickSlot1",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -646,18 +666,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "SelectNextEquipment",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "2de1398f-f401-45d5-893f-c94f43fd950c",
-                    "path": "<Keyboard>/2",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "GrabLadder",
+                    "action": "SelectQuickSlot2",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

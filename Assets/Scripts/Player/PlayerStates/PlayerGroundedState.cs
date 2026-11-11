@@ -24,6 +24,11 @@ public class PlayerGroundedState : PlayerState
         }
 
         player.MarkGrounded();
-        TryStartBufferedJump();
+        if (TryStartBufferedJump())
+        {
+            return;
+        }
+
+        player.TryStartQuickStep(xInput);
     }
 }

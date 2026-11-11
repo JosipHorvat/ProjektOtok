@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51869731043a57341940a2c1aaf181fe, type: 3}
+  m_Name: AssaultRifle
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDefinition
+  fireMode: 1
+  ammunitionType: 2
+  shotsPerSecond: 9
+  magazineCapacity: 30
+  damage: 8
+  pierce: 0
+  shotPower: 1
+  projectilePrefab: {fileID: 6755061141863262301, guid: f07f4aba246172a4bb7ad199a8b3595c, type: 3}
+  projectileSpeed: 35
+  range: 25
+  hitLayers:
+    serializedVersion: 2
+    m_Bits: 1280
+  hipFireSpread: 10
+  aimedSpread: 0
+  aimedSpreadIncreasePerShot: 0.7
+  maximumAimedSpread: 7.5
+  aimedSpreadRecoveryDegreesPerSecond: 1.8
+  recoilDegrees: 2.2
+  recoilRecoveryDegreesPerSecond: 18
+  firePoseDuration: 0.28
+  muzzleFlashPrefab: {fileID: 533908018008182067, guid: b08b593b0c513d544a3304058756c624, type: 3}
+  muzzleFlashDuration: 0.09
+  muzzleFlashScale: 1.8
+  muzzleSmokePrefab: {fileID: 4292114625337498911, guid: 3212fdf2b74f5e44797c7566aeb1ece2, type: 3}
+  muzzleSmokeDuration: 0.35
+  muzzleSmokeScale: 1.8
+  shellCasingPrefab: {fileID: 6755381789869757603, guid: e41061ae04dd220429b57810a0465bff, type: 3}
+  shellEjectionForce: 1.7
+  shellEjectionAngleRange: 55
+  shellSpinDegreesPerSecond: 720
+  semiAutomaticFireTrigger: Fire
+  automaticFireBool: Firing
+  inventoryIcon: {fileID: 0}
+  inventoryWidth: 1
+  inventoryHeight: 2

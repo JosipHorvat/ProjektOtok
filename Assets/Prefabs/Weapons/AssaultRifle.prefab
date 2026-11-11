@@ -25,7 +25,7 @@ Transform:
   m_GameObject: {fileID: 429117859904711293}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.95337105, y: 0.18602362, z: 0}
+  m_LocalPosition: {x: 0.951, y: 0.165, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -123,6 +123,37 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!1 &3395365381118290691
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2400530688642404342}
+  m_Layer: 0
+  m_Name: ShellCasingEjectPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2400530688642404342
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3395365381118290691}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.279, y: 0.106, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1936292632641242656}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4972964058615783624
 GameObject:
   m_ObjectHideFlags: 0
@@ -219,6 +250,8 @@ Transform:
   - {fileID: 5338526874707170907}
   - {fileID: 6518164909665916840}
   - {fileID: 8467005301931946425}
+  - {fileID: 933119284033264224}
+  - {fileID: 2400530688642404342}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5516920847647293125
@@ -236,6 +269,9 @@ MonoBehaviour:
   mainGrip: {fileID: 5338526874707170907}
   supportGrip: {fileID: 6518164909665916840}
   muzzle: {fileID: 8467005301931946425}
+  bulletEjectPoint: {fileID: 933119284033264224}
+  shellEjectPoint: {fileID: 2400530688642404342}
+  definition: {fileID: 11400000, guid: 0ed5873ae15d1784584987df438b6489, type: 2}
   aimHoldOffset: {x: 0.29507133, y: -0.20428015}
   relaxedHoldOffset: {x: 0.23605707, y: -0.23605707}
   runningHoldOffset: {x: 0.20881972, y: -0.21789883}
@@ -247,3 +283,34 @@ MonoBehaviour:
   supportHandInIdle: 1
   supportHandInRun: 1
   supportHandInAim: 1
+--- !u!1 &8589282719296428239
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 933119284033264224}
+  m_Layer: 0
+  m_Name: BulletEjectPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &933119284033264224
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8589282719296428239}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.939, y: 0.152, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1936292632641242656}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

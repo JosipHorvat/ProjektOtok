@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.U2D.IK;
 
@@ -143,7 +144,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     [SerializeField]
     private HeldWeapon startingWeapon;
 
-    [Tooltip("Prototype loadout cycled with the Select Previous/Next Equipment inputs. Replace with the inventory later.")]
+    [Tooltip("Prototype quick-slot loadout: index 0 is slot 1 and index 1 is slot 2. Replace with inventory assignments later.")]
     [SerializeField]
     private HeldWeapon[] testWeapons;
 
@@ -163,6 +164,9 @@ public sealed class WeaponHoldController : MonoBehaviour
     private Animator animator;
     private Player player;
     private HeldWeapon currentWeapon;
+    private WeaponAmmoState currentAmmoState;
+    private readonly Dictionary<int, WeaponAmmoState> quickSlotAmmoStates = new Dictionary<int, WeaponAmmoState>();
+    private readonly Dictionary<HeldWeapon, WeaponAmmoState> otherWeaponAmmoStates = new Dictionary<HeldWeapon, WeaponAmmoState>();
     private float supportArmLength;
     private float currentAngle;
     private Vector2 currentHoldOffset;
@@ -176,17 +180,53 @@ public sealed class WeaponHoldController : MonoBehaviour
     private float locomotionBobTimer;
     private float aimMotionBlend;
     private float currentVerticalLag;
+    private float firePoseUntilTime;
+    private float currentRecoilDegrees;
+    private float recoilRecoveryDegreesPerSecond = 28f;
+    private bool aimPoseReady;
     private Quaternion torsoRestLocalRotation;
     private bool hasTorsoRestLocalRotation;
 
     /// <summary>Weapon currently in the hands, or null when unarmed.</summary>
     public HeldWeapon CurrentWeapon => currentWeapon;
 
+    /// <summary>Runtime loaded-ammunition state for the equipped weapon, or null if unconfigured.</summary>
+    public WeaponAmmoState CurrentAmmoState => currentAmmoState;
+
     /// <summary>True while Focus Aim is held and a weapon is equipped.</summary>
     public bool IsAiming => wasAiming;
 
     /// <summary>World-space direction the barrel points. Valid only while a weapon is equipped.</summary>
     public Vector3 AimDirection => currentWeapon != null ? currentWeapon.transform.right : transform.right;
+
+    /// <summary>True when the current raised weapon pose has settled for a shot.</summary>
+    public bool AimPoseReady => aimPoseReady;
+
+    /// <summary>Current accumulated upward recoil in degrees; recovers toward zero over time.</summary>
+    public float CurrentRecoilDegrees => currentRecoilDegrees;
+
+    /// <summary>Requests a short raised weapon pose for a tap-fired shot.</summary>
+    public void RequestFirePose(float duration)
+    {
+        if (currentWeapon == null || isLadderMode)
+        {
+            return;
+        }
+
+        firePoseUntilTime = Mathf.Max(firePoseUntilTime, Time.time + Mathf.Max(0.01f, duration));
+    }
+
+    /// <summary>Adds upward recoil to the weapon aim and configures its recovery speed.</summary>
+    public void ApplyShotRecoil(float recoilDegrees, float recoveryDegreesPerSecond)
+    {
+        if (currentWeapon == null || isLadderMode)
+        {
+            return;
+        }
+
+        currentRecoilDegrees += Mathf.Max(0f, recoilDegrees);
+        recoilRecoveryDegreesPerSecond = Mathf.Max(0f, recoveryDegreesPerSecond);
+    }
 
     private void Awake()
     {
@@ -259,6 +299,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     {
         if (isLadderMode)
         {
+            aimPoseReady = false;
             if (animator != null)
             {
                 animator.SetBool(AimAnimatorParameter, false);
@@ -268,7 +309,8 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
-        bool isAiming = currentWeapon != null && inputReader != null && inputReader.FocusAimHeld;
+        bool isAiming = currentWeapon != null &&
+            ((inputReader != null && inputReader.FocusAimHeld) || Time.time < firePoseUntilTime);
 
         float horizontalSpeed = player != null && player.rb != null
             ? Mathf.Abs(player.rb.linearVelocity.x)
@@ -286,6 +328,7 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         if (currentWeapon == null || weaponAimPivot == null)
         {
+            aimPoseReady = false;
             wasAiming = false;
             BlendArmWeights(0f, 0f);
             return;
@@ -358,7 +401,9 @@ public sealed class WeaponHoldController : MonoBehaviour
             {
                 UpdateHeadAim(worldAimDirection);
                 float rawAngle = Mathf.Atan2(localAimDirection.y, localAimDirection.x) * Mathf.Rad2Deg;
-                targetAngle = currentWeapon.ClampAimAngle(rawAngle + MuzzleOffsetCorrection(localAimDirection.magnitude));
+                float facingSign = weaponAimPivot.lossyScale.x < 0f ? -1f : 1f;
+                targetAngle = currentWeapon.ClampAimAngle(
+                    rawAngle + MuzzleOffsetCorrection(localAimDirection.magnitude) + currentRecoilDegrees * facingSign);
             }
             else
             {
@@ -375,13 +420,15 @@ public sealed class WeaponHoldController : MonoBehaviour
             float baseAngle = isMoving ? currentWeapon.RunningAngle : currentWeapon.RelaxedAngle;
             Vector2 baseOffset = isMoving ? currentWeapon.RunningHoldOffset : currentWeapon.RelaxedHoldOffset;
 
-            targetAngle = baseAngle + proceduralAngle;
+            float facingSign = weaponAimPivot.lossyScale.x < 0f ? -1f : 1f;
+            targetAngle = baseAngle + proceduralAngle + currentRecoilDegrees * facingSign;
             targetHoldOffset = baseOffset + proceduralHoldOffset;
         }
 
         float rotationSpeed = isAiming ? AimRotationSpeed : RelaxRotationSpeed;
         currentAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, rotationSpeed * Time.deltaTime);
         currentHoldOffset = Vector2.Lerp(currentHoldOffset, targetHoldOffset, HoldOffsetBlendSpeed * Time.deltaTime);
+        currentRecoilDegrees = Mathf.MoveTowards(currentRecoilDegrees, 0f, recoilRecoveryDegreesPerSecond * Time.deltaTime);
 
         weaponAimPivot.localRotation = Quaternion.Euler(0f, 0f, currentAngle);
         ApplyWeaponHoldOffset();
@@ -389,6 +436,14 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         float targetSupportWeight = currentWeapon.IsSupportHandActive(isAiming, isMoving) ? 1f : 0f;
         BlendArmWeights(1f, targetSupportWeight);
+
+        bool mainArmSettled = mainArmSolver == null || mainArmSolver.weight >= 0.98f;
+        bool supportArmSettled = supportArmSolver == null || supportArmSolver.weight >= targetSupportWeight - 0.02f;
+        aimPoseReady = isAiming &&
+            aimMotionBlend >= 0.98f &&
+            Mathf.Abs(Mathf.DeltaAngle(currentAngle, targetAngle)) <= 1.5f &&
+            (currentHoldOffset - targetHoldOffset).sqrMagnitude <= 0.0004f &&
+            mainArmSettled && supportArmSettled;
     }
 
     /// <summary>Instantiates the weapon prefab into the socket and puts the hands on it.</summary>
@@ -402,6 +457,8 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         currentWeapon = Instantiate(weaponPrefab, weaponSocket);
         currentWeapon.name = weaponPrefab.name;
+        aimPoseReady = false;
+        currentAmmoState = GetAmmoStateForWeapon(weaponPrefab);
         currentWeapon.transform.localRotation = Quaternion.identity;
         currentWeapon.transform.localScale = Vector3.one;
         currentHoldOffset = currentWeapon.RelaxedHoldOffset;
@@ -413,6 +470,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Removes the held weapon; arms fall back to animation.</summary>
     public void Unequip()
     {
+        currentAmmoState = null;
         if (currentWeapon == null)
         {
             return;
@@ -420,6 +478,41 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         Destroy(currentWeapon.gameObject);
         currentWeapon = null;
+    }
+
+    private WeaponAmmoState GetAmmoStateForWeapon(HeldWeapon weaponPrefab)
+    {
+        WeaponDefinition definition = weaponPrefab != null ? weaponPrefab.Definition : null;
+        if (definition == null)
+        {
+            return null;
+        }
+
+        HeldWeapon[] loadout = testWeapons ?? System.Array.Empty<HeldWeapon>();
+        int slotIndex = testWeaponIndex >= 0 && testWeaponIndex < loadout.Length && loadout[testWeaponIndex] == weaponPrefab
+            ? testWeaponIndex
+            : System.Array.IndexOf(loadout, weaponPrefab);
+
+        if (slotIndex >= 0)
+        {
+            if (!quickSlotAmmoStates.TryGetValue(slotIndex, out WeaponAmmoState quickSlotState))
+            {
+                quickSlotState = new WeaponAmmoState();
+                quickSlotAmmoStates.Add(slotIndex, quickSlotState);
+            }
+
+            quickSlotState.Initialize(definition);
+            return quickSlotState;
+        }
+
+        if (!otherWeaponAmmoStates.TryGetValue(weaponPrefab, out WeaponAmmoState state))
+        {
+            state = new WeaponAmmoState();
+            otherWeaponAmmoStates.Add(weaponPrefab, state);
+        }
+
+        state.Initialize(definition);
+        return state;
     }
 
     /// <summary>Moves the equipped weapon to the character's back and frees the hands for ladder poses.</summary>
@@ -440,6 +533,8 @@ public sealed class WeaponHoldController : MonoBehaviour
 
         if (isLadderMode)
         {
+            firePoseUntilTime = 0f;
+            currentRecoilDegrees = 0f;
             if (currentWeapon != null)
             {
                 weaponParentBeforeLadder = currentWeapon.transform.parent;
@@ -727,6 +822,28 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
+        int quickSlotIndex = -1;
+        if (inputReader.SelectQuickSlot1PressedThisFrame)
+        {
+            quickSlotIndex = 0;
+        }
+        else if (inputReader.SelectQuickSlot2PressedThisFrame)
+        {
+            quickSlotIndex = 1;
+        }
+
+        int quickSlotCount = Mathf.Min(testWeapons.Length, 2);
+        if (quickSlotIndex >= 0)
+        {
+            if (quickSlotIndex < quickSlotCount)
+            {
+                testWeaponIndex = quickSlotIndex;
+                Equip(testWeapons[testWeaponIndex]);
+            }
+
+            return;
+        }
+
         int step = 0;
         if (inputReader.SelectNextEquipmentPressedThisFrame)
         {
@@ -736,13 +853,17 @@ public sealed class WeaponHoldController : MonoBehaviour
         {
             step = -1;
         }
+        else
+        {
+            step = inputReader.EquipmentScrollDirection;
+        }
 
         if (step == 0)
         {
             return;
         }
 
-        testWeaponIndex = (testWeaponIndex + step + testWeapons.Length) % testWeapons.Length;
+        testWeaponIndex = (testWeaponIndex + step + quickSlotCount) % quickSlotCount;
         Equip(testWeapons[testWeaponIndex]);
     }
 }

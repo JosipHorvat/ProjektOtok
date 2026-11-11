@@ -21,56 +21,46 @@ public sealed class HeldWeapon : MonoBehaviour
     private const float MinimumOffsetThresholdSqr = 0.0001f;
 
     [Header("Fit markers (local to this transform)")]
-    [SerializeField]
-    private Transform mainGrip;
+    public Transform mainGrip;
 
-    [SerializeField]
-    private Transform supportGrip;
+    public Transform supportGrip;
 
-    [SerializeField]
-    private Transform muzzle;
+    public Transform muzzle;
+
+    [Tooltip("World-space point where the projectile is instantiated.")]
+    public Transform bulletEjectPoint;
+
+    [Tooltip("World-space spawn point for the casing ejection effect.")]
+    public Transform shellEjectPoint;
+
+    [Header("Fire configuration")]
+    public WeaponDefinition definition;
 
     [Header("Hold pose")]
     [Tooltip("Where the main grip sits relative to the aim pivot (shoulder) while aiming. X is along the aim direction.")]
-    [SerializeField]
-    private Vector2 aimHoldOffset = new Vector2(0.65f, -0.45f);
+    public Vector2 aimHoldOffset = new Vector2(0.65f, -0.45f);
 
     [Tooltip("Where the main grip sits relative to the aim pivot while idle and not aiming.")]
-    [SerializeField]
-    private Vector2 relaxedHoldOffset = new Vector2(0.6f, -0.5f);
+    public Vector2 relaxedHoldOffset = new Vector2(0.6f, -0.5f);
 
     [Tooltip("Where the main grip sits relative to the aim pivot while moving/running.")]
-    [SerializeField]
-    private Vector2 runningHoldOffset = new Vector2(0.48f, -0.48f);
+    public Vector2 runningHoldOffset = new Vector2(0.48f, -0.48f);
 
-    [SerializeField]
-    private SupportHandMode supportHand = SupportHandMode.OnWeapon;
+    public SupportHandMode supportHand = SupportHandMode.OnWeapon;
 
     [Header("Angles (degrees, local to the player, 0 = straight ahead)")]
-    [SerializeField, Range(-90f, 90f)]
-    private float relaxedAngle = -15f;
-
-    [SerializeField, Range(-90f, 90f)]
-    private float runningAngle = -30f;
-
-    [SerializeField, Range(-90f, 0f)]
-    private float minimumAimAngle = -75f;
-
-    [SerializeField, Range(0f, 90f)]
-    private float maximumAimAngle = 80f;
+    [Range(-90f, 90f)] public float relaxedAngle = -15f;
+    [Range(-90f, 90f)] public float runningAngle = -30f;
+    [Range(-90f, 0f)] public float minimumAimAngle = -75f;
+    [Range(0f, 90f)] public float maximumAimAngle = 80f;
 
     [Header("Support hand engagement")]
     [Tooltip("Whether the far hand holds the weapon during idle.")]
-    [SerializeField]
-    private bool supportHandInIdle = false;
-
+    public bool supportHandInIdle;
     [Tooltip("Whether the far hand holds the weapon while moving/running.")]
-    [SerializeField]
-    private bool supportHandInRun = true;
-
+    public bool supportHandInRun = true;
     [Tooltip("Whether the far hand holds the weapon while aiming.")]
-    [SerializeField]
-    private bool supportHandInAim = true;
+    public bool supportHandInAim = true;
 
     /// <summary>Marker the main (near) hand holds. Falls back to this transform.</summary>
     public Transform MainGrip => mainGrip != null ? mainGrip : transform;
@@ -80,6 +70,15 @@ public sealed class HeldWeapon : MonoBehaviour
 
     /// <summary>Barrel exit point. Null when the weapon has no muzzle marker.</summary>
     public Transform Muzzle => muzzle;
+
+    /// <summary>Position where the projectile is spawned. Falls back to the muzzle, then weapon root.</summary>
+    public Transform BulletEjectPoint => bulletEjectPoint != null ? bulletEjectPoint : Muzzle != null ? Muzzle : transform;
+
+    /// <summary>Position where a future casing ejection effect is spawned.</summary>
+    public Transform ShellEjectPoint => shellEjectPoint;
+
+    /// <summary>Fire and ammunition settings for this weapon. Null until configured.</summary>
+    public WeaponDefinition Definition => definition;
 
     public Vector2 AimHoldOffset => aimHoldOffset;
 

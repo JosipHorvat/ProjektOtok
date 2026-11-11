@@ -11,10 +11,13 @@ public class Player : MonoBehaviour
     private const float GroundedVerticalVelocityThreshold = 0.1f;
     private const float JumpApexVelocityThreshold = 2.5f;
     private const float LadderGrabInputDeadZone = 0.1f;
+    private const float MinimumQuickStepTravelDuration = 0.01f;
     private const string OnLadderAnimatorParameter = "OnLadder";
     private const string ClimbAnimatorParameter = "Climb";
     private const string LadderAnimatorLayerName = "Ladder";
     private const string LadderFacingRightAnimatorParameter = "LadderFacingRight";
+    private const string QuickStepAnimatorTrigger = "QuickStep";
+    private const string RunSpeedAnimatorParameter = "RunSpeed";
 
     #endregion
 
@@ -27,6 +30,8 @@ public class Player : MonoBehaviour
     private CapsuleCollider2D capsuleCollider;
     private PlayerSquash playerSquash;
     private WeaponHoldController weaponHoldController;
+    private bool hasQuickStepAnimatorTrigger;
+    private bool hasRunSpeedAnimatorParameter;
     private LadderClimbVolume availableLadder;
     private LadderClimbVolume activeLadder;
     private readonly List<Collider2D> ladderIgnoredGroundColliders = new List<Collider2D>();
@@ -41,6 +46,13 @@ public class Player : MonoBehaviour
     public float smoothMovement = 10f;
     public float acceleration = 120f;
     public float airDeceleration = 30f;
+
+    [Header("Quick Step and Run")]
+    [SerializeField, Min(0f)] private float quickStepDistance = 1.7f;
+    [SerializeField, Min(MinimumQuickStepTravelDuration)] private float quickStepTravelDuration = 0.18f;
+    [SerializeField, Min(0f)] private float quickStepRecoveryDuration = 0.08f;
+    [SerializeField, Min(0f)] private float quickStepRunHoldThreshold = 0.12f;
+    [SerializeField, Range(1f, 2f)] private float runSpeedMultiplier = 1.35f;
 
     #endregion
 
@@ -142,12 +154,34 @@ public class Player : MonoBehaviour
     public PlayerJumpState jumpState { get; private set; }
     public PlayerAirState airState { get; private set; }
     public PlayerLadderState ladderState { get; private set; }
+    public PlayerQuickStepState quickStepState { get; private set; }
 
     #endregion
 
     #region Public State Data
 
     public Vector2 MoveInput => InputReader.MoveInput;
+
+    public float QuickStepSpeed =>
+        quickStepDistance / Mathf.Max(quickStepTravelDuration, MinimumQuickStepTravelDuration);
+
+    public float QuickStepTravelDuration =>
+        Mathf.Max(quickStepTravelDuration, MinimumQuickStepTravelDuration);
+
+    public float QuickStepRecoveryDuration =>
+        Mathf.Max(quickStepRecoveryDuration, 0f);
+
+    public float QuickStepRunHoldThreshold =>
+        Mathf.Max(quickStepRunHoldThreshold, 0f);
+
+    public float QuickStepTotalDuration =>
+        QuickStepTravelDuration + QuickStepRecoveryDuration;
+
+    public bool IsForwardRunRequested =>
+        InputReader != null &&
+        InputReader.QuickStepHeld &&
+        !InputReader.FocusAimHeld &&
+        MoveInput.x * facingDir > MinimumInput;
 
     public GroundInfo CurrentGroundInfo =>
         currentGroundInfo.HasGround
@@ -187,6 +221,7 @@ public class Player : MonoBehaviour
     private void Update()
     {
         stateMachine.CurrentState?.Update();
+        UpdateRunAnimationSpeed();
         TryGrabNearbyLadder();
         TryEnterNearbyLadder();
     }
@@ -232,6 +267,32 @@ public class Player : MonoBehaviour
             hasMovementInput
                 ? moveState
                 : idleState);
+    }
+
+    /// <summary>Begins a grounded quick-step in the current input direction or backward when input is neutral.</summary>
+    public bool TryStartQuickStep(float horizontalInput)
+    {
+        if (InputReader == null ||
+            !InputReader.QuickStepPressedThisFrame ||
+            !HasGroundContact ||
+            (stateMachine.CurrentState != idleState && stateMachine.CurrentState != moveState))
+        {
+            return false;
+        }
+
+        int movementDirection =
+            Mathf.Abs(horizontalInput) > MinimumInput
+                ? (horizontalInput > 0f ? 1 : -1)
+                : -facingDir;
+
+        if (Mathf.Abs(horizontalInput) > MinimumInput)
+        {
+            CheckIfShouldFlip(movementDirection);
+        }
+
+        quickStepState.SetMovementDirection(movementDirection);
+        stateMachine.ChangeState(quickStepState);
+        return true;
     }
 
     public void SetHorizontalVelocity(float velocityX) =>
@@ -502,10 +563,49 @@ public class Player : MonoBehaviour
             slopeVerticalVelocity);
     }
 
+    /// <summary>Applies the committed quick-step movement while following the current ground slope.</summary>
+    public void ApplyQuickStepMovement(float horizontalInput, float quickStepSpeed)
+    {
+        if (!HasGroundContact)
+        {
+            ApplyAirMovement(horizontalInput);
+            ApplyGravity(false, false);
+            return;
+        }
+
+        Vector2 tangent = CurrentGroundInfo.Tangent;
+        float movementSpeed = Mathf.Max(0f, quickStepSpeed);
+        float targetHorizontalVelocity = horizontalInput * movementSpeed;
+        float horizontalVelocity = Mathf.MoveTowards(
+            rb.linearVelocity.x,
+            targetHorizontalVelocity,
+            smoothMovement * Mathf.Max(movementSpeed, moveSpeed) * Time.fixedDeltaTime);
+
+        float tangentHorizontal = Mathf.Max(
+            Mathf.Abs(tangent.x),
+            MinimumTangentHorizontal);
+
+        float slopeVerticalVelocity =
+            horizontalVelocity * tangent.y / tangentHorizontal;
+
+        if (slopeVerticalVelocity < 0f)
+        {
+            slopeVerticalVelocity -= slopeStickSpeed;
+        }
+
+        slopeVerticalVelocity -= GetGroundSnapSpeed();
+        rb.linearVelocity = new Vector2(horizontalVelocity, slopeVerticalVelocity);
+    }
+
     private float GetGroundMoveSpeed()
     {
         bool isAiming = InputReader != null && InputReader.FocusAimHeld;
         float speedMultiplier = isAiming ? aimingMoveSpeedMultiplier : 1f;
+        if (IsForwardRunRequested)
+        {
+            speedMultiplier *= runSpeedMultiplier;
+        }
+
         return moveSpeed * speedMultiplier;
     }
 
@@ -677,6 +777,47 @@ public class Player : MonoBehaviour
             ? 0f
             : rb.linearVelocity.y;
 
+    /// <summary>Triggers the authored quick-step animation when this Animator supports it.</summary>
+    public void TriggerQuickStepAnimation()
+    {
+        if (anim != null && hasQuickStepAnimatorTrigger)
+        {
+            anim.ResetTrigger(QuickStepAnimatorTrigger);
+            anim.SetTrigger(QuickStepAnimatorTrigger);
+        }
+    }
+
+    private void UpdateRunAnimationSpeed()
+    {
+        if (anim != null && hasRunSpeedAnimatorParameter)
+        {
+            anim.SetFloat(
+                RunSpeedAnimatorParameter,
+                IsForwardRunRequested ? runSpeedMultiplier : 1f);
+        }
+    }
+
+    private static bool HasAnimatorParameter(
+        Animator animator,
+        string parameterName,
+        AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.name == parameterName && parameter.type == parameterType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     #endregion
 
     #region Initialization
@@ -714,12 +855,25 @@ public class Player : MonoBehaviour
             new PlayerLadderState(
                 this,
                 stateMachine);
+
+        quickStepState =
+            new PlayerQuickStepState(
+                this,
+                stateMachine);
     }
 
     private void CacheComponents()
     {
         anim =
             GetComponentInChildren<Animator>();
+        hasQuickStepAnimatorTrigger = HasAnimatorParameter(
+            anim,
+            QuickStepAnimatorTrigger,
+            AnimatorControllerParameterType.Trigger);
+        hasRunSpeedAnimatorParameter = HasAnimatorParameter(
+            anim,
+            RunSpeedAnimatorParameter,
+            AnimatorControllerParameterType.Float);
 
         playerSquash =
             GetComponentInChildren<PlayerSquash>();

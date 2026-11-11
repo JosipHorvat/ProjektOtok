@@ -243,6 +243,26 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""priority"": 0
                 },
                 {
+                    ""name"": ""SelectQuickSlot1"",
+                    ""type"": ""Button"",
+                    ""id"": ""ab679401-4d0c-44de-89e1-29a2e114ff01"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false,
+                    ""priority"": 0
+                },
+                {
+                    ""name"": ""SelectQuickSlot2"",
+                    ""type"": ""Button"",
+                    ""id"": ""31f4e192-85c9-4e7a-86d3-d3df03a9e1c4"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false,
+                    ""priority"": 0
+                },
+                {
                     ""name"": ""ScrollEquipment"",
                     ""type"": ""PassThrough"",
                     ""id"": ""50d1117b-4dc1-458e-9c90-05756d5d426d"",
@@ -710,7 +730,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": ""Keyboard&Mouse"",
-                    ""action"": ""SelectPreviousEquipment"",
+                    ""action"": ""SelectQuickSlot1"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -732,18 +752,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": ""Keyboard&Mouse"",
-                    ""action"": ""SelectNextEquipment"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""2de1398f-f401-45d5-893f-c94f43fd950c"",
-                    ""path"": ""<Keyboard>/2"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": ""Keyboard&Mouse"",
-                    ""action"": ""GrabLadder"",
+                    ""action"": ""SelectQuickSlot2"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -1422,6 +1431,8 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         m_Player_UseHealingItem = m_Player.FindAction("UseHealingItem", throwIfNotFound: true);
         m_Player_SelectPreviousEquipment = m_Player.FindAction("SelectPreviousEquipment", throwIfNotFound: true);
         m_Player_SelectNextEquipment = m_Player.FindAction("SelectNextEquipment", throwIfNotFound: true);
+        m_Player_SelectQuickSlot1 = m_Player.FindAction("SelectQuickSlot1", throwIfNotFound: true);
+        m_Player_SelectQuickSlot2 = m_Player.FindAction("SelectQuickSlot2", throwIfNotFound: true);
         m_Player_ScrollEquipment = m_Player.FindAction("ScrollEquipment", throwIfNotFound: true);
         m_Player_OpenInventory = m_Player.FindAction("OpenInventory", throwIfNotFound: true);
         m_Player_OpenMap = m_Player.FindAction("OpenMap", throwIfNotFound: true);
@@ -1533,6 +1544,8 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_UseHealingItem;
     private readonly InputAction m_Player_SelectPreviousEquipment;
     private readonly InputAction m_Player_SelectNextEquipment;
+    private readonly InputAction m_Player_SelectQuickSlot1;
+    private readonly InputAction m_Player_SelectQuickSlot2;
     private readonly InputAction m_Player_ScrollEquipment;
     private readonly InputAction m_Player_OpenInventory;
     private readonly InputAction m_Player_OpenMap;
@@ -1607,6 +1620,14 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/SelectNextEquipment".
         /// </summary>
         public InputAction @SelectNextEquipment => m_Wrapper.m_Player_SelectNextEquipment;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/SelectQuickSlot1".
+        /// </summary>
+        public InputAction @SelectQuickSlot1 => m_Wrapper.m_Player_SelectQuickSlot1;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/SelectQuickSlot2".
+        /// </summary>
+        public InputAction @SelectQuickSlot2 => m_Wrapper.m_Player_SelectQuickSlot2;
         /// <summary>
         /// Provides access to the underlying input action "Player/ScrollEquipment".
         /// </summary>
@@ -1690,6 +1711,12 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
             @SelectNextEquipment.started += instance.OnSelectNextEquipment;
             @SelectNextEquipment.performed += instance.OnSelectNextEquipment;
             @SelectNextEquipment.canceled += instance.OnSelectNextEquipment;
+            @SelectQuickSlot1.started += instance.OnSelectQuickSlot1;
+            @SelectQuickSlot1.performed += instance.OnSelectQuickSlot1;
+            @SelectQuickSlot1.canceled += instance.OnSelectQuickSlot1;
+            @SelectQuickSlot2.started += instance.OnSelectQuickSlot2;
+            @SelectQuickSlot2.performed += instance.OnSelectQuickSlot2;
+            @SelectQuickSlot2.canceled += instance.OnSelectQuickSlot2;
             @ScrollEquipment.started += instance.OnScrollEquipment;
             @ScrollEquipment.performed += instance.OnScrollEquipment;
             @ScrollEquipment.canceled += instance.OnScrollEquipment;
@@ -1755,6 +1782,12 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
             @SelectNextEquipment.started -= instance.OnSelectNextEquipment;
             @SelectNextEquipment.performed -= instance.OnSelectNextEquipment;
             @SelectNextEquipment.canceled -= instance.OnSelectNextEquipment;
+            @SelectQuickSlot1.started -= instance.OnSelectQuickSlot1;
+            @SelectQuickSlot1.performed -= instance.OnSelectQuickSlot1;
+            @SelectQuickSlot1.canceled -= instance.OnSelectQuickSlot1;
+            @SelectQuickSlot2.started -= instance.OnSelectQuickSlot2;
+            @SelectQuickSlot2.performed -= instance.OnSelectQuickSlot2;
+            @SelectQuickSlot2.canceled -= instance.OnSelectQuickSlot2;
             @ScrollEquipment.started -= instance.OnScrollEquipment;
             @ScrollEquipment.performed -= instance.OnScrollEquipment;
             @ScrollEquipment.canceled -= instance.OnScrollEquipment;
@@ -2169,6 +2202,20 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnSelectNextEquipment(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "SelectQuickSlot1" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnSelectQuickSlot1(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "SelectQuickSlot2" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnSelectQuickSlot2(InputAction.CallbackContext context);
         /// <summary>
         /// Method invoked when associated input action "ScrollEquipment" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>
