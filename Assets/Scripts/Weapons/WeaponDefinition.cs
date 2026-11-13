@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>Reusable ranged-weapon configuration, separated from the held weapon's pose data.</summary>
 [CreateAssetMenu(fileName = "WeaponDefinition", menuName = "Weapons/Weapon Definition")]
-public sealed class WeaponDefinition : ScriptableObject
+public sealed class WeaponDefinition : ItemDefinition
 {
     public enum FireMode
     {
@@ -89,10 +89,14 @@ public sealed class WeaponDefinition : ScriptableObject
     [Tooltip("Animator trigger used to leave an interrupted or completed reload state.")]
     public string reloadCancelTrigger = "ReloadComplete";
 
-    [Header("Future inventory data")]
-    public Sprite inventoryIcon;
-    [Min(1)] public int inventoryWidth = 1;
-    [Min(1)] public int inventoryHeight = 2;
+    [Header("Available upgrades")]
+    [Tooltip("Upgrade options supported by this weapon. Runtime upgrade levels belong to individual owned weapon instances, never this shared asset.")]
+    public WeaponUpgradeOption[] upgradeOptions = System.Array.Empty<WeaponUpgradeOption>();
+
+    // Shared item metadata is inherited from ItemDefinition.
+
+    /// <summary>Gets the inventory category represented by this ranged weapon definition.</summary>
+    public override ItemCategory Category => ItemCategory.Weapon;
 
     public FireMode Mode => fireMode;
 
@@ -153,11 +157,34 @@ public sealed class WeaponDefinition : ScriptableObject
     public float ShellSpinDegreesPerSecond => shellSpinDegreesPerSecond > 0f ? shellSpinDegreesPerSecond : 720f;
 
 
-    private void OnValidate()
+    protected override void OnValidate()
     {
+        base.OnValidate();
         reloadDuration = Mathf.Max(0.05f, reloadDuration);
         roundInsertInterval = Mathf.Max(0.05f, roundInsertInterval);
         magazineCapacity = Mathf.Max(1, magazineCapacity);
+
+        if (upgradeOptions == null)
+        {
+            upgradeOptions = System.Array.Empty<WeaponUpgradeOption>();
+            return;
+        }
+
+        for (int index = 0; index < upgradeOptions.Length; index++)
+        {
+            WeaponUpgradeOption option = upgradeOptions[index];
+            option.maximumLevel = Mathf.Max(1, option.maximumLevel);
+            upgradeOptions[index] = option;
+
+            for (int otherIndex = index + 1; otherIndex < upgradeOptions.Length; otherIndex++)
+            {
+                if (option.upgradeType == upgradeOptions[otherIndex].upgradeType)
+                {
+                    Debug.LogWarning($"Weapon definition '{name}' lists the '{option.upgradeType}' upgrade more than once.", this);
+                    break;
+                }
+            }
+        }
     }
 
     public string SemiAutomaticFireTrigger => semiAutomaticFireTrigger;
@@ -178,7 +205,5 @@ public sealed class WeaponDefinition : ScriptableObject
 
     public string ReloadCancelTrigger => reloadCancelTrigger;
 
-    public Sprite InventoryIcon => inventoryIcon;
-
-    public Vector2Int InventoryFootprint => new Vector2Int(inventoryWidth, inventoryHeight);
+    // Inventory icon and footprint are inherited from ItemDefinition.
 }

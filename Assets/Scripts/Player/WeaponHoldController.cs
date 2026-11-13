@@ -144,7 +144,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     [SerializeField]
     private HeldWeapon startingWeapon;
 
-    [Tooltip("Prototype quick-slot loadout: index 0 is slot 1 and index 1 is slot 2. Replace with inventory assignments later.")]
+    [Tooltip("Held-weapon prefab catalog used to resolve the visual rig for inventory-owned WeaponDefinition items. Ownership and ammo state live on item instances.")]
     [SerializeField]
     private HeldWeapon[] testWeapons;
 
@@ -163,11 +163,11 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private Animator animator;
     private Player player;
+    private PlayerItemInventory playerItemInventory;
     private PlayerReloadController reloadController;
     private HeldWeapon currentWeapon;
+    private ItemInstance currentWeaponItem;
     private WeaponAmmoState currentAmmoState;
-    private readonly Dictionary<int, WeaponAmmoState> quickSlotAmmoStates = new Dictionary<int, WeaponAmmoState>();
-    private readonly Dictionary<HeldWeapon, WeaponAmmoState> otherWeaponAmmoStates = new Dictionary<HeldWeapon, WeaponAmmoState>();
     private float supportArmLength;
     private float currentAngle;
     private Vector2 currentHoldOffset;
@@ -191,7 +191,10 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Weapon currently in the hands, or null when unarmed.</summary>
     public HeldWeapon CurrentWeapon => currentWeapon;
 
-    /// <summary>Runtime loaded-ammunition state for the equipped weapon, or null if unconfigured.</summary>
+    /// <summary>Owned weapon item instance currently equipped, or null when unarmed.</summary>
+    public ItemInstance CurrentWeaponItem => currentWeaponItem;
+
+    /// <summary>Runtime loaded-ammunition adapter for the equipped owned weapon item, or null if unconfigured.</summary>
     public WeaponAmmoState CurrentAmmoState => currentAmmoState;
 
     /// <summary>True while Focus Aim is held and a weapon is equipped.</summary>
@@ -233,6 +236,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         player = GetComponentInParent<Player>();
+        playerItemInventory = GetComponentInParent<PlayerItemInventory>();
         reloadController = GetComponent<PlayerReloadController>();
 
         if (aimCamera == null)
@@ -268,6 +272,48 @@ public sealed class WeaponHoldController : MonoBehaviour
         supportArmLength = MeasureChainLength(supportArmSolver);
     }
 
+    /// <summary>Equips the saved active weapon instance after the player's inventory has been restored.</summary>
+    public bool RestoreSavedWeaponSelection()
+    {
+        if (playerItemInventory == null)
+        {
+            playerItemInventory = GetComponent<PlayerItemInventory>();
+        }
+
+        if (playerItemInventory == null || playerItemInventory.Inventory == null)
+        {
+            return false;
+        }
+
+        ItemInstance savedWeapon = string.IsNullOrWhiteSpace(playerItemInventory.EquippedWeaponInstanceId)
+            ? null
+            : playerItemInventory.Inventory.FindItem(playerItemInventory.EquippedWeaponInstanceId);
+        if (savedWeapon != null && !(savedWeapon.Definition is WeaponDefinition))
+        {
+            savedWeapon = null;
+        }
+
+        if (savedWeapon == null)
+        {
+            IReadOnlyList<ItemInstance> ownedItems = playerItemInventory.Inventory.Items;
+            for (int index = 0; index < ownedItems.Count; index++)
+            {
+                if (ownedItems[index].IsEquipped && ownedItems[index].Definition is WeaponDefinition)
+                {
+                    savedWeapon = ownedItems[index];
+                    break;
+                }
+            }
+        }
+
+        if (savedWeapon == null || currentWeaponItem == savedWeapon)
+        {
+            return currentWeaponItem == savedWeapon && savedWeapon != null;
+        }
+
+        return TryEquipOwnedWeapon(savedWeapon);
+    }
+
     private void Start()
     {
         if (torsoBone != null)
@@ -276,15 +322,24 @@ public sealed class WeaponHoldController : MonoBehaviour
             hasTorsoRestLocalRotation = true;
         }
 
-        if (startingWeapon != null)
+        if (RestoreSavedWeaponSelection() || currentWeaponItem != null)
         {
-            testWeaponIndex = System.Array.IndexOf(testWeapons ?? System.Array.Empty<HeldWeapon>(), startingWeapon);
-            Equip(startingWeapon);
+            return;
         }
-        else
+
+        if (startingWeapon != null && startingWeapon.Definition != null)
         {
-            SetArmWeights(0f, 0f, true);
+            List<ItemInstance> ownedWeapons = GetOwnedWeaponItems();
+            testWeaponIndex = FindOwnedWeaponIndex(ownedWeapons, startingWeapon.Definition);
+            ItemInstance startingWeaponItem = testWeaponIndex >= 0 ? ownedWeapons[testWeaponIndex] : null;
+            if (startingWeaponItem != null)
+            {
+                TryEquipOwnedWeapon(startingWeaponItem, startingWeapon);
+                return;
+            }
         }
+
+        SetArmWeights(0f, 0f, true);
     }
 
     private void Update()
@@ -467,32 +522,116 @@ public sealed class WeaponHoldController : MonoBehaviour
             mainArmSettled && supportArmSettled;
     }
 
-    /// <summary>Instantiates the weapon prefab into the socket and puts the hands on it.</summary>
+    /// <summary>Equips the owned weapon instance matching a held-weapon prefab.</summary>
     public void Equip(HeldWeapon weaponPrefab)
     {
-        Unequip();
-        if (weaponPrefab == null || weaponSocket == null)
+        if (weaponPrefab == null || weaponPrefab.Definition == null || playerItemInventory == null)
         {
+            Unequip();
             return;
         }
 
+        List<ItemInstance> ownedWeapons = GetOwnedWeaponItems();
+        ItemInstance ownedItem = null;
+        for (int index = 0; index < ownedWeapons.Count; index++)
+        {
+            if (ownedWeapons[index].Definition == weaponPrefab.Definition)
+            {
+                ownedItem = ownedWeapons[index];
+                break;
+            }
+        }
+
+        if (ownedItem == null)
+        {
+            Debug.LogWarning($"Cannot equip {weaponPrefab.name}: the player does not own a matching weapon item instance.", this);
+            Unequip();
+            return;
+        }
+
+        TryEquipOwnedWeapon(ownedItem, weaponPrefab);
+    }
+
+    /// <summary>Equips one specific owned weapon item using its existing held-weapon rig prefab.</summary>
+    public bool TryEquipOwnedWeapon(ItemInstance weaponItem, HeldWeapon weaponPrefab)
+    {
+        if (weaponItem == null || weaponPrefab == null || weaponSocket == null || playerItemInventory == null ||
+            !(weaponItem.Definition is WeaponDefinition weaponDefinition) || weaponPrefab.Definition != weaponDefinition ||
+            playerItemInventory.Inventory == null ||
+            !ReferenceEquals(playerItemInventory.Inventory.FindItem(weaponItem.InstanceId), weaponItem))
+        {
+            return false;
+        }
+
+        Unequip();
+        currentWeaponItem = weaponItem;
         currentWeapon = Instantiate(weaponPrefab, weaponSocket);
         currentWeapon.name = weaponPrefab.name;
+        currentAmmoState = new WeaponAmmoState(weaponItem);
+        weaponItem.TrySetLoadedRounds(weaponItem.LoadedRounds);
+        List<ItemInstance> ownedWeapons = GetOwnedWeaponItems();
+        for (int index = 0; index < ownedWeapons.Count; index++)
+        {
+            playerItemInventory.Inventory.TrySetEquipped(
+                ownedWeapons[index].InstanceId,
+                ownedWeapons[index] == weaponItem);
+        }
+
+        playerItemInventory.SetEquippedWeaponInstanceId(weaponItem.InstanceId);
         aimPoseReady = false;
-        currentAmmoState = GetAmmoStateForWeapon(weaponPrefab);
         currentWeapon.transform.localRotation = Quaternion.identity;
         currentWeapon.transform.localScale = Vector3.one;
         currentHoldOffset = currentWeapon.RelaxedHoldOffset;
         currentAngle = currentWeapon.RelaxedAngle;
         ApplyWeaponHoldOffset();
         PlaceHandTargets();
+        return true;
+    }
+    /// <summary>Equips an owned weapon instance using the matching prefab from this controller's visual catalog.</summary>
+    public bool TryEquipOwnedWeapon(ItemInstance weaponItem)
+    {
+        if (weaponItem == null || !(weaponItem.Definition is WeaponDefinition weaponDefinition))
+        {
+            return false;
+        }
+
+        HeldWeapon weaponPrefab = FindHeldWeaponPrefab(weaponDefinition);
+        if (weaponPrefab == null)
+        {
+            return false;
+        }
+
+        bool equipped = TryEquipOwnedWeapon(weaponItem, weaponPrefab);
+        if (equipped)
+        {
+            List<ItemInstance> ownedWeapons = GetOwnedWeaponItems();
+            for (int index = 0; index < ownedWeapons.Count; index++)
+            {
+                if (ReferenceEquals(ownedWeapons[index], weaponItem))
+                {
+                    testWeaponIndex = index;
+                    break;
+                }
+            }
+        }
+
+        return equipped;
     }
 
-    /// <summary>Removes the held weapon; arms fall back to animation.</summary>
+
+
+    /// <summary>Removes the held weapon; arms fall back to animation while preserving its owned instance state.</summary>
     public void Unequip()
     {
         reloadController?.CancelReload();
+        if (currentWeaponItem != null && playerItemInventory != null && playerItemInventory.Inventory != null)
+        {
+            playerItemInventory.Inventory.TrySetEquipped(currentWeaponItem.InstanceId, false);
+        }
+
+        playerItemInventory?.SetEquippedWeaponInstanceId(string.Empty);
         currentAmmoState = null;
+        currentWeaponItem = null;
         if (currentWeapon == null)
         {
             return;
@@ -502,39 +641,53 @@ public sealed class WeaponHoldController : MonoBehaviour
         currentWeapon = null;
     }
 
-    private WeaponAmmoState GetAmmoStateForWeapon(HeldWeapon weaponPrefab)
+    private List<ItemInstance> GetOwnedWeaponItems()
     {
-        WeaponDefinition definition = weaponPrefab != null ? weaponPrefab.Definition : null;
-        if (definition == null)
+        List<ItemInstance> ownedWeapons = new List<ItemInstance>();
+        if (playerItemInventory == null || playerItemInventory.Inventory == null)
         {
-            return null;
+            return ownedWeapons;
         }
 
-        HeldWeapon[] loadout = testWeapons ?? System.Array.Empty<HeldWeapon>();
-        int slotIndex = testWeaponIndex >= 0 && testWeaponIndex < loadout.Length && loadout[testWeaponIndex] == weaponPrefab
-            ? testWeaponIndex
-            : System.Array.IndexOf(loadout, weaponPrefab);
-
-        if (slotIndex >= 0)
+        IReadOnlyList<ItemInstance> inventoryItems = playerItemInventory.Inventory.Items;
+        for (int index = 0; index < inventoryItems.Count; index++)
         {
-            if (!quickSlotAmmoStates.TryGetValue(slotIndex, out WeaponAmmoState quickSlotState))
+            ItemInstance item = inventoryItems[index];
+            if (item.Definition is WeaponDefinition && item.Definition.Category == ItemCategory.Weapon)
             {
-                quickSlotState = new WeaponAmmoState();
-                quickSlotAmmoStates.Add(slotIndex, quickSlotState);
+                ownedWeapons.Add(item);
             }
-
-            quickSlotState.Initialize(definition);
-            return quickSlotState;
         }
 
-        if (!otherWeaponAmmoStates.TryGetValue(weaponPrefab, out WeaponAmmoState state))
+        return ownedWeapons;
+    }
+
+    private static int FindOwnedWeaponIndex(List<ItemInstance> ownedWeapons, WeaponDefinition definition)
+    {
+        for (int index = 0; index < ownedWeapons.Count; index++)
         {
-            state = new WeaponAmmoState();
-            otherWeaponAmmoStates.Add(weaponPrefab, state);
+            if (ownedWeapons[index].Definition == definition)
+            {
+                return index;
+            }
         }
 
-        state.Initialize(definition);
-        return state;
+        return -1;
+    }
+
+    private HeldWeapon FindHeldWeaponPrefab(WeaponDefinition definition)
+    {
+        HeldWeapon[] weaponPrefabCatalog = testWeapons ?? System.Array.Empty<HeldWeapon>();
+        for (int index = 0; index < weaponPrefabCatalog.Length; index++)
+        {
+            HeldWeapon weaponPrefab = weaponPrefabCatalog[index];
+            if (weaponPrefab != null && weaponPrefab.Definition == definition)
+            {
+                return weaponPrefab;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Moves the equipped weapon to the character's back and frees the hands for ladder poses.</summary>
@@ -844,9 +997,22 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private void HandleDebugWeaponSwap()
     {
-        if (inputReader == null || testWeapons == null || testWeapons.Length == 0)
+        if (inputReader == null || playerItemInventory == null)
         {
             return;
+        }
+
+        List<ItemInstance> ownedWeapons = GetOwnedWeaponItems();
+        if (ownedWeapons.Count == 0)
+        {
+            return;
+        }
+
+        if (testWeaponIndex < 0 || testWeaponIndex >= ownedWeapons.Count)
+        {
+            testWeaponIndex = FindOwnedWeaponIndex(ownedWeapons, currentWeaponItem != null
+                ? currentWeaponItem.Definition as WeaponDefinition
+                : null);
         }
 
         int quickSlotIndex = -1;
@@ -859,14 +1025,12 @@ public sealed class WeaponHoldController : MonoBehaviour
             quickSlotIndex = 1;
         }
 
-        int quickSlotCount = Mathf.Min(testWeapons.Length, 2);
-        int weaponCycleCount = testWeapons.Length;
         if (quickSlotIndex >= 0)
         {
-            if (quickSlotIndex < quickSlotCount)
+            ItemInstance slottedWeapon = playerItemInventory.GetWeaponInEquipmentSlot(quickSlotIndex);
+            if (slottedWeapon != null)
             {
-                testWeaponIndex = quickSlotIndex;
-                Equip(testWeapons[testWeaponIndex]);
+                TryEquipOwnedWeapon(slottedWeapon);
             }
 
             return;
@@ -891,7 +1055,34 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
-        testWeaponIndex = (testWeaponIndex + step + weaponCycleCount) % weaponCycleCount;
-        Equip(testWeapons[testWeaponIndex]);
+        int currentIndex = testWeaponIndex >= 0 ? testWeaponIndex : 0;
+        int nextIndex = (currentIndex + step + ownedWeapons.Count) % ownedWeapons.Count;
+        EquipOwnedWeaponAt(ownedWeapons, nextIndex);
+    }
+
+    private void EquipOwnedWeaponAt(List<ItemInstance> ownedWeapons, int index)
+    {
+        if (index < 0 || index >= ownedWeapons.Count)
+        {
+            return;
+        }
+
+        ItemInstance weaponItem = ownedWeapons[index];
+        if (!(weaponItem.Definition is WeaponDefinition definition))
+        {
+            return;
+        }
+
+        HeldWeapon weaponPrefab = FindHeldWeaponPrefab(definition);
+        if (weaponPrefab == null)
+        {
+            Debug.LogWarning($"No held-weapon prefab is configured for owned weapon definition '{definition.name}'.", this);
+            return;
+        }
+
+        if (TryEquipOwnedWeapon(weaponItem, weaponPrefab))
+        {
+            testWeaponIndex = index;
+        }
     }
 }

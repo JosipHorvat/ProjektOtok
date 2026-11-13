@@ -39,6 +39,7 @@ public sealed class SaveManager : MonoBehaviour
         if (!string.IsNullOrWhiteSpace(settings.saveFileName)) fileName = settings.saveFileName;
         encrypData = settings.encryptData;
         sessionStartTime = Time.unscaledTime;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
         DontDestroyOnLoad(gameObject);
     }
 
@@ -46,6 +47,7 @@ public sealed class SaveManager : MonoBehaviour
     {
         if (Instance == this)
         {
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
             Instance = null;
         }
     }
@@ -254,6 +256,14 @@ public sealed class SaveManager : MonoBehaviour
         ApplyDataToRuntime();
     }
 
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode loadMode)
+    {
+        if (gameData != null)
+        {
+            ApplyDataToRuntime();
+        }
+    }
+
     private void ApplyDataToRuntime()
     {
         saveManagers = FindAllSaveManagers();
@@ -267,7 +277,7 @@ public sealed class SaveManager : MonoBehaviour
     }
 
     private bool IsValidSlot(int slotIndex) => slotIndex >= 0 && slotIndex < ConfiguredSlotCount;
-    private List<ISaveManager> FindAllSaveManagers() => UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude).OfType<ISaveManager>().ToList();
+    private List<ISaveManager> FindAllSaveManagers() => UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include).OfType<ISaveManager>().ToList();
 
     private void OnApplicationPause(bool paused)
     {

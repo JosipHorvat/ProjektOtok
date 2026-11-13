@@ -12,6 +12,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51869731043a57341940a2c1aaf181fe, type: 3}
   m_Name: ReloadTest_RoundByRound
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDefinition
+  stableItemId: test.weapon.reload-round-by-round
+  displayName: Reload Test (Round-by-Round)
+  description: Test-only weapon definition for validating round-by-round reload behavior.
+  inventoryIcon: {fileID: 21300000, guid: b903da7ed8023394e92fc6e63539576e, type: 3}
+  category: 0
+  tags:
+  - test-only
+  - weapon
+  - shotgun
+  inventoryWidth: 1
+  inventoryHeight: 2
+  canRotate: 1
+  maximumStackSize: 1
+  canBeStored: 0
+  canBeDiscarded: 0
+  canBeSold: 0
+  canBePurchased: 0
+  protectedFromSale: 1
+  protectedFromDiscard: 1
+  buyPrice: 0
+  sellPrice: 0
+  itemAmmunitionType: 0
   fireMode: 0
   ammunitionType: 3
   shotsPerSecond: 2.5
@@ -52,6 +74,3 @@ MonoBehaviour:
   roundByRoundReloadTrigger: ReloadRoundByRound
   reloadSpeedParameter: ReloadSpeed
   reloadCancelTrigger: ReloadComplete
-  inventoryIcon: {fileID: 0}
-  inventoryWidth: 1
-  inventoryHeight: 2

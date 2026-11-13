@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>Spawns visible projectiles using the existing player input and weapon-hold rig.</summary>
@@ -45,9 +46,13 @@ public sealed class WeaponFireController : MonoBehaviour
                 return 0f;
             }
 
+            ItemInstance weaponItem = weaponHoldController != null && weaponHoldController.CurrentAmmoState != null
+                ? weaponHoldController.CurrentAmmoState.WeaponItemInstance
+                : null;
+            WeaponRuntimeStats runtimeStats = GetRuntimeStats(definition, weaponItem);
             return inputReader != null && inputReader.FocusAimHeld
-                ? GetCurrentAimedSpread(definition)
-                : definition.HipFireSpread;
+                ? GetCurrentAimedSpread(runtimeStats)
+                : runtimeStats.HipFireSpread;
         }
     }
 
@@ -94,13 +99,17 @@ public sealed class WeaponFireController : MonoBehaviour
         }
 
         WeaponDefinition definition = weapon != null ? weapon.Definition : null;
+        ItemInstance weaponItem = weaponHoldController != null && weaponHoldController.CurrentAmmoState != null
+            ? weaponHoldController.CurrentAmmoState.WeaponItemInstance
+            : null;
+        WeaponRuntimeStats runtimeStats = GetRuntimeStats(definition, weaponItem);
         if (definition == null)
         {
             currentAimedSpreadBloomDegrees = 0f;
         }
         else
         {
-            float maximumBloom = Mathf.Max(0f, definition.MaximumAimedSpread - definition.AimedSpread);
+            float maximumBloom = Mathf.Max(0f, runtimeStats.MaximumAimedSpread - runtimeStats.AimedSpread);
             currentAimedSpreadBloomDegrees = Mathf.Min(currentAimedSpreadBloomDegrees, maximumBloom);
             currentAimedSpreadBloomDegrees = Mathf.MoveTowards(
                 currentAimedSpreadBloomDegrees,
@@ -210,7 +219,8 @@ public sealed class WeaponFireController : MonoBehaviour
         bool fired = FireOneShot(weapon, definition, ammoState);
         if (fired)
         {
-            nextShotTime = Time.time + Mathf.Max(1f / Mathf.Max(definition.ShotsPerSecond, 0.01f), MinimumShotInterval);
+            WeaponRuntimeStats runtimeStats = GetRuntimeStats(definition, ammoState.WeaponItemInstance);
+            nextShotTime = Time.time + Mathf.Max(1f / Mathf.Max(runtimeStats.ShotsPerSecond, 0.01f), MinimumShotInterval);
         }
 
         ClearPendingShot();
@@ -273,13 +283,14 @@ public sealed class WeaponFireController : MonoBehaviour
         Transform muzzle = weapon.Muzzle != null ? weapon.Muzzle : weapon.transform;
         Transform bulletEjectPoint = weapon.BulletEjectPoint;
         bool isAimedShot = inputReader.FocusAimHeld;
+        WeaponRuntimeStats runtimeStats = GetRuntimeStats(definition, ammoState.WeaponItemInstance);
         Vector2 direction = GetShotDirection(weapon, bulletEjectPoint, isAimedShot);
         if (direction.sqrMagnitude < 0.0001f)
         {
             direction = weapon.transform.right;
         }
 
-        float spread = isAimedShot ? GetCurrentAimedSpread(definition) : definition.HipFireSpread;
+        float spread = isAimedShot ? GetCurrentAimedSpread(runtimeStats) : runtimeStats.HipFireSpread;
         direction = Quaternion.Euler(0f, 0f, Random.Range(-spread, spread)) * direction.normalized;
         Quaternion shotRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
 
@@ -297,7 +308,7 @@ public sealed class WeaponFireController : MonoBehaviour
         weaponHoldController.ApplyShotRecoil(definition.RecoilDegrees, definition.RecoilRecoveryDegreesPerSecond);
         if (isAimedShot)
         {
-            AddAimedSpreadBloom(definition);
+            AddAimedSpreadBloom(definition, runtimeStats);
         }
 
         if (definition.Mode == WeaponDefinition.FireMode.SemiAutomatic)
@@ -350,15 +361,24 @@ public sealed class WeaponFireController : MonoBehaviour
             : weapon.transform.right;
     }
 
-    private float GetCurrentAimedSpread(WeaponDefinition definition)
+    private WeaponRuntimeStats GetRuntimeStats(WeaponDefinition definition, ItemInstance weaponItem)
     {
-        float maximumSpread = Mathf.Max(definition.AimedSpread, definition.MaximumAimedSpread);
-        return Mathf.Clamp(definition.AimedSpread + currentAimedSpreadBloomDegrees, 0f, maximumSpread);
+        PlayerItemInventory itemInventory = player != null ? player.GetComponent<PlayerItemInventory>() : null;
+        IReadOnlyList<ItemInstance> installedAttachments = itemInventory != null && weaponItem != null
+            ? itemInventory.GetInstalledAttachmentsForWeapon(weaponItem.InstanceId)
+            : null;
+        return WeaponRuntimeStats.Resolve(definition, weaponItem, installedAttachments);
     }
 
-    private void AddAimedSpreadBloom(WeaponDefinition definition)
+    private float GetCurrentAimedSpread(WeaponRuntimeStats runtimeStats)
     {
-        float maximumBloom = Mathf.Max(0f, definition.MaximumAimedSpread - definition.AimedSpread);
+        float maximumSpread = Mathf.Max(runtimeStats.AimedSpread, runtimeStats.MaximumAimedSpread);
+        return Mathf.Clamp(runtimeStats.AimedSpread + currentAimedSpreadBloomDegrees, 0f, maximumSpread);
+    }
+
+    private void AddAimedSpreadBloom(WeaponDefinition definition, WeaponRuntimeStats runtimeStats)
+    {
+        float maximumBloom = Mathf.Max(0f, runtimeStats.MaximumAimedSpread - runtimeStats.AimedSpread);
         currentAimedSpreadBloomDegrees = Mathf.Min(
             currentAimedSpreadBloomDegrees + definition.AimedSpreadIncreasePerShot,
             maximumBloom);

@@ -12,6 +12,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51869731043a57341940a2c1aaf181fe, type: 3}
   m_Name: AssaultRifle
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDefinition
+  stableItemId: weapon.assault-rifle
+  displayName: Assault Rifle
+  description: "An automatic rifle using 5.45\xD739mm ammunition."
+  inventoryIcon: {fileID: 21300000, guid: b098b3583c2a046469b0e1c380686097, type: 3}
+  tags:
+  - weapon
+  - firearm
+  - rifle
+  inventoryWidth: 4
+  inventoryHeight: 2
+  canRotate: 1
+  maximumStackSize: 1
+  canBeStored: 1
+  canBeDiscarded: 1
+  canBeSold: 0
+  canBePurchased: 1
+  protectedFromSale: 0
+  protectedFromDiscard: 0
+  buyPrice: 650
+  sellPrice: 0
   fireMode: 1
   ammunitionType: 2
   shotsPerSecond: 9
@@ -52,6 +72,10 @@ MonoBehaviour:
   roundByRoundReloadTrigger: ReloadRoundByRound
   reloadSpeedParameter: ReloadSpeed
   reloadCancelTrigger: ReloadComplete
-  inventoryIcon: {fileID: 0}
-  inventoryWidth: 1
-  inventoryHeight: 2
+  upgradeOptions:
+  - upgradeType: 2
+    maximumLevel: 2
+    valuePerLevel: 0.35
+  - upgradeType: 4
+    maximumLevel: 2
+    valuePerLevel: 0.4

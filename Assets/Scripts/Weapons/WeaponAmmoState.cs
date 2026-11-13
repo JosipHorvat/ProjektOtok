@@ -1,90 +1,85 @@
-using UnityEngine;
+using System;
 
-/// <summary>Runtime loaded-ammunition state preserved independently from weapon instances.</summary>
-[System.Serializable]
+/// <summary>Compatibility adapter exposing weapon-ammo operations over one owned ItemInstance.</summary>
+[Serializable]
 public sealed class WeaponAmmoState
 {
-    private int loadedRounds;
-    private bool isInitialized;
+    [NonSerialized] private ItemInstance weaponItemInstance;
 
-    /// <summary>Current rounds loaded in this weapon's magazine.</summary>
-    public int LoadedRounds => loadedRounds;
+    /// <summary>Creates an adapter bound to the specified owned weapon item instance.</summary>
+    public WeaponAmmoState(ItemInstance ownedWeaponItem)
+    {
+        Bind(ownedWeaponItem);
+    }
 
-    /// <summary>Initializes from the definition once, then clamps to its current magazine capacity.</summary>
+    /// <summary>Creates an unbound adapter for serializers and legacy callers.</summary>
+    public WeaponAmmoState()
+    {
+    }
+
+    /// <summary>Gets the rounds stored on the bound weapon item instance.</summary>
+    public int LoadedRounds => weaponItemInstance != null ? weaponItemInstance.LoadedRounds : 0;
+
+    /// <summary>Gets the owned weapon item represented by this adapter.</summary>
+    public ItemInstance WeaponItemInstance => weaponItemInstance;
+
+    /// <summary>Binds this adapter to an existing inventory-owned weapon instance.</summary>
+    public bool Bind(ItemInstance ownedWeaponItem)
+    {
+        if (ownedWeaponItem == null || !(ownedWeaponItem.Definition is WeaponDefinition))
+        {
+            weaponItemInstance = null;
+            return false;
+        }
+
+        weaponItemInstance = ownedWeaponItem;
+        return true;
+    }
+
+    /// <summary>Clamps loaded rounds on the owned item to its current weapon definition.</summary>
     public void Initialize(WeaponDefinition definition)
     {
-        if (definition == null)
+        if (weaponItemInstance == null || definition == null || weaponItemInstance.Definition != definition)
         {
             return;
         }
 
-        int capacity = Mathf.Max(0, definition.MagazineCapacity);
-        if (!isInitialized)
-        {
-            loadedRounds = capacity;
-            isInitialized = true;
-        }
-        else
-        {
-            loadedRounds = Mathf.Clamp(loadedRounds, 0, capacity);
-        }
+        weaponItemInstance.TrySetLoadedRounds(weaponItemInstance.LoadedRounds);
     }
 
-    /// <summary>Returns how many reserve rounds can fit in this magazine.</summary>
+    /// <summary>Returns the number of reserve rounds that fit in the bound magazine.</summary>
     public int GetTransferCapacity(WeaponDefinition definition)
     {
-        if (definition == null)
-        {
-            return 0;
-        }
-
-        Initialize(definition);
-        if (!isInitialized)
-        {
-            return 0;
-        }
-
-        return Mathf.Max(0, definition.MagazineCapacity - loadedRounds);
+        return weaponItemInstance != null ? weaponItemInstance.GetLoadedTransferCapacity(definition) : 0;
     }
 
-    /// <summary>Adds up to the requested number of rounds and returns the number actually loaded.</summary>
+    /// <summary>Adds up to the requested number of rounds to the bound item instance.</summary>
     public int AddRounds(WeaponDefinition definition, int requestedRounds)
     {
-        if (requestedRounds <= 0)
+        if (weaponItemInstance == null || weaponItemInstance.Definition != definition)
         {
             return 0;
         }
 
-        int transferCapacity = GetTransferCapacity(definition);
-        int roundsAdded = Mathf.Min(requestedRounds, transferCapacity);
-        loadedRounds += roundsAdded;
-        return roundsAdded;
+        return weaponItemInstance.AddLoadedRounds(requestedRounds);
     }
 
-    /// <summary>Replaces the loaded magazine with no more than the weapon's capacity.</summary>
+    /// <summary>Replaces the loaded magazine on the bound item instance.</summary>
     public int ReplaceMagazine(WeaponDefinition definition, int roundsToLoad)
     {
-        if (definition == null)
+        if (weaponItemInstance == null || weaponItemInstance.Definition != definition ||
+            !weaponItemInstance.TryReplaceMagazine(roundsToLoad))
         {
-            return loadedRounds;
+            return LoadedRounds;
         }
 
-        int capacity = Mathf.Max(0, definition.MagazineCapacity);
-        loadedRounds = Mathf.Clamp(roundsToLoad, 0, capacity);
-        isInitialized = true;
-        return loadedRounds;
+        return weaponItemInstance.LoadedRounds;
     }
 
-    /// <summary>Spends one loaded round when available; returns whether a round was spent.</summary>
+    /// <summary>Spends one loaded round from the bound weapon item instance.</summary>
     public bool TrySpendRound(WeaponDefinition definition)
     {
-        Initialize(definition);
-        if (!isInitialized || loadedRounds <= 0)
-        {
-            return false;
-        }
-
-        loadedRounds--;
-        return true;
+        return weaponItemInstance != null && weaponItemInstance.Definition == definition &&
+               weaponItemInstance.TrySpendLoadedRound();
     }
 }

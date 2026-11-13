@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef4a76b35566bde4cb0f42bd762a9392, type: 3}
+  m_Name: Ammo_Pistol
+  m_EditorClassIdentifier: Assembly-CSharp::AmmoDefinition
+  stableItemId: ammo.pistol.9x19
+  displayName: "9\xD719mm Ammunition"
+  description: Ammunition compatible with the Pistol.
+  inventoryIcon: {fileID: 21300000, guid: 81eaf108fb352ec4287838553c5e974a, type: 3}
+  tags:
+  - ammo
+  - pistol
+  - 9x19
+  inventoryWidth: 1
+  inventoryHeight: 2
+  canRotate: 0
+  maximumStackSize: 120
+  canBeStored: 1
+  canBeDiscarded: 1
+  canBeSold: 1
+  canBePurchased: 1
+  protectedFromSale: 0
+  protectedFromDiscard: 0
+  buyPrice: 1
+  sellPrice: 1
+  itemAmmunitionType: 1
+  ammunitionStackCompatibilityKey: ammo.pistol.9x19

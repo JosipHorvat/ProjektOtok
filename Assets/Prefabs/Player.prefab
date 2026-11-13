@@ -482,6 +482,8 @@ GameObject:
   - component: {fileID: 2401167635385166009}
   - component: {fileID: 5442267993439181621}
   - component: {fileID: 4857097689517457891}
+  - component: {fileID: 175929176459024032}
+  - component: {fileID: 4949275367735091406}
   m_Layer: 9
   m_Name: Player
   m_TagString: Untagged
@@ -647,7 +649,61 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WeaponFireController
   inputReader: {fileID: 2401167635385166009}
   weaponHoldController: {fileID: 0}
+  reloadController: {fileID: 0}
   animator: {fileID: 5601858054461521469}
+  aimCamera: {fileID: 0}
+  logShotDebug: 1
+--- !u!114 &175929176459024032
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2606814258713735347}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 321302b4f0bdd834ca6c961e708781be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerItemInventory
+  startingPistolDefinition: {fileID: 11400000, guid: d5ba1cd25ce3cce42ade1a36c4d369d4, type: 2}
+  startingAssaultRifleDefinition: {fileID: 11400000, guid: 0ed5873ae15d1784584987df438b6489, type: 2}
+  pistolAmmoDefinition: {fileID: 11400000, guid: 681e8fcf2e4c114478ec64bfa194cbb6, type: 2}
+  rifleAmmoDefinition: {fileID: 11400000, guid: c09c4f2ae65d2e64b945682bf184729e, type: 2}
+  startingPistolReserveRounds: 160
+  startingRifleReserveRounds: 240
+  definitionCatalog:
+  - {fileID: 11400000, guid: dca5f972a8ed91c44bdd0a6e6d6c3009, type: 2}
+  - {fileID: 11400000, guid: b87ac4d6337dda141bb8ae9c22eb7b4e, type: 2}
+  weaponUpgradePurchaseOptions:
+  - weaponStableItemId: weapon.pistol
+    upgradeType: 2
+    levelCosts: 78000000f0000000
+  - weaponStableItemId: weapon.pistol
+    upgradeType: 4
+    levelCosts: 64000000c8000000
+  - weaponStableItemId: weapon.assault-rifle
+    upgradeType: 2
+    levelCosts: b400000068010000
+  - weaponStableItemId: weapon.assault-rifle
+    upgradeType: 4
+    levelCosts: 960000002c010000
+  keyItems: []
+  stashItems: []
+  installedAttachmentItems: []
+  primaryWeaponInstanceId: 
+  secondaryWeaponInstanceId: 
+--- !u!114 &4949275367735091406
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2606814258713735347}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 329d23a4c92403f4d8164ba9c49f33a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAmmoInventory
 --- !u!1 &2735860681730159635
 GameObject:
   m_ObjectHideFlags: 0

@@ -6,6 +6,9 @@ public sealed class GameData
 {
     public float totalPlayTime;
     public SerializableDictionary<string, bool> completedEventIds;
+    public SerializableDictionary<string, int> worldPickupQuantities;
+    public SerializableDictionary<string, int> shopStockCounts;
+    public InventorySaveData inventoryState;
     public int extraLifeCount;
     public int slotNumber;
     public bool hasCheckpoint;
@@ -19,6 +22,9 @@ public sealed class GameData
     {
         totalPlayTime = 0f;
         completedEventIds = new SerializableDictionary<string, bool>();
+        worldPickupQuantities = new SerializableDictionary<string, int>();
+        shopStockCounts = new SerializableDictionary<string, int>();
+        inventoryState = new InventorySaveData();
         extraLifeCount = 0;
         slotNumber = 1;
         hasCheckpoint = false;
