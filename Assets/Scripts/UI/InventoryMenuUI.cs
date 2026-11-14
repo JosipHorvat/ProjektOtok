@@ -1125,7 +1125,7 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
                 actions.Add(new MenuActionEntry("Assign Secondary", () => AssignSelectedWeapon(PlayerItemInventory.SecondaryWeaponSlotIndex)));
             }
         }
-        else if (definition.Category == ItemCategory.Weapon)
+        else if (definition.Category == ItemCategory.Weapon && !(definition is MeleeWeaponDefinition))
         {
             actions.Add(new MenuActionEntry("Equip — unavailable", UseOrToggleSelectedAction, false));
         }
@@ -1665,6 +1665,10 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
                  definition.Category == ItemCategory.Valuable || definition.Category == ItemCategory.Consumable)
         {
             description += "\n\nThis item action is not available in this build.";
+        }
+        else if (definition is MeleeWeaponDefinition)
+        {
+            description += "\n\nThis is the automatic melee fallback, not a ranged quick-slot weapon.";
         }
         else if (definition.Category == ItemCategory.Weapon && !(definition is WeaponDefinition))
         {
@@ -2704,6 +2708,14 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
 
     private string BuildItemStats(ItemInstance item)
     {
+        if (item.Definition is MeleeWeaponDefinition meleeWeaponDefinition)
+        {
+            string storageStatus = meleeWeaponDefinition.CanBeStored ? "Available" : "Protected";
+            string saleStatus = meleeWeaponDefinition.CanBeSold ? "Available" : "Protected";
+            string discardStatus = meleeWeaponDefinition.CanBeDiscarded ? "Available" : "Protected";
+            return $"Melee fallback (not a ranged quick-slot item)\nDamage: {meleeWeaponDefinition.Damage:0.##}\nRange: {meleeWeaponDefinition.AttackRange:0.##} m\nAttack cooldown: {meleeWeaponDefinition.AttackCooldown:0.##} s\nStorage: {storageStatus}   Sale: {saleStatus}   Discard: {discardStatus}\nFootprint: {GetFootprintLabel(item)}";
+        }
+
         if (item.Definition is WeaponDefinition weaponDefinition)
         {
             int reserveRounds = activePlayerInventory.GetReserveRounds(weaponDefinition.AmmoType);

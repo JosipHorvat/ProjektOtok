@@ -72,14 +72,20 @@ public sealed class ItemInventory : ISerializationCallbackReceiver
         out ItemInventory starterInventory,
         out InventoryOperationFailure failure,
         int pistolReserveRounds = DefaultPistolReserveRounds,
-        int rifleReserveRounds = DefaultRifleReserveRounds)
+        int rifleReserveRounds = DefaultRifleReserveRounds,
+        MeleeWeaponDefinition starterMeleeWeaponDefinition = null)
     {
         starterInventory = null;
         failure = InventoryOperationFailure.None;
-        if (!IsValidDefinition(pistolDefinition) || !IsValidDefinition(assaultRifleDefinition) ||
-            !IsValidDefinition(pistolAmmoDefinition) || !IsValidDefinition(rifleAmmoDefinition) ||
-            pistolAmmoDefinition.AmmunitionType != pistolDefinition.AmmoType ||
-            rifleAmmoDefinition.AmmunitionType != assaultRifleDefinition.AmmoType)
+        if (!IsValidDefinition(pistolAmmoDefinition) || !IsValidDefinition(rifleAmmoDefinition) ||
+            (pistolDefinition != null &&
+             (!IsValidDefinition(pistolDefinition) || pistolAmmoDefinition.AmmunitionType != pistolDefinition.AmmoType)) ||
+            (assaultRifleDefinition != null &&
+             (!IsValidDefinition(assaultRifleDefinition) || rifleAmmoDefinition.AmmunitionType != assaultRifleDefinition.AmmoType)) ||
+            (starterMeleeWeaponDefinition != null &&
+             (!IsValidDefinition(starterMeleeWeaponDefinition) ||
+              starterMeleeWeaponDefinition.Category != ItemCategory.Weapon ||
+              starterMeleeWeaponDefinition.MaximumStackSize != 1)))
         {
             failure = InventoryOperationFailure.InvalidDefinition;
             return false;
@@ -92,10 +98,20 @@ public sealed class ItemInventory : ISerializationCallbackReceiver
         }
 
         ItemInventory candidateInventory = new ItemInventory(DefaultGridWidth, DefaultGridHeight);
-        if (!TryAddWeaponDefinition(candidateInventory, pistolDefinition, out failure) ||
-            !TryAddWeaponDefinition(candidateInventory, assaultRifleDefinition, out failure))
+        if ((pistolDefinition != null && !TryAddWeaponDefinition(candidateInventory, pistolDefinition, out failure)) ||
+            (assaultRifleDefinition != null && !TryAddWeaponDefinition(candidateInventory, assaultRifleDefinition, out failure)))
         {
             return false;
+        }
+
+        if (starterMeleeWeaponDefinition != null)
+        {
+            InventoryOperationResult meleeWeaponResult = candidateInventory.TryAddQuantity(starterMeleeWeaponDefinition, 1, true);
+            if (!meleeWeaponResult.Completed)
+            {
+                failure = meleeWeaponResult.Failure;
+                return false;
+            }
         }
 
         if (pistolReserveRounds > 0)

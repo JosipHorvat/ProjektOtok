@@ -241,9 +241,25 @@ public sealed class WeaponFireController : MonoBehaviour
         ClearAutomaticFireParameter();
     }
 
+    /// <summary>Clears staged shots and automatic-fire feedback before a committed melee attack.</summary>
+    public void NotifyMeleeAttackStarted()
+    {
+        WeaponDefinition stagedDefinition = pendingShotDefinition != null
+            ? pendingShotDefinition
+            : observedWeapon != null ? observedWeapon.Definition : null;
+        ClearPendingShot();
+        ClearAutomaticFireParameter();
+        if (animator != null && stagedDefinition != null &&
+            !string.IsNullOrWhiteSpace(stagedDefinition.SemiAutomaticFireTrigger))
+        {
+            animator.ResetTrigger(stagedDefinition.SemiAutomaticFireTrigger);
+        }
+    }
+
     private bool IsBlocked()
     {
         return (player != null && player.IsOnLadder) ||
+               (inputReader != null && inputReader.IsMeleeAttackCommitted) ||
                (reloadController != null && reloadController.IsReloading);
     }
 

@@ -1,5 +1,14 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+
+/// <summary>Identifies which existing control initiated the melee attack action.</summary>
+public enum MeleeAttackInputSource
+{
+    None,
+    KeyboardQ,
+    GamepadRightShoulder
+}
 
 /// <summary>Owns the generated input actions and exposes player input to gameplay systems.</summary>
 [DefaultExecutionOrder(-100)]
@@ -12,6 +21,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     private float lastJumpPressedTime = float.NegativeInfinity;
     private float previousClimbInput;
     private bool climbUpPressedThisFrame;
+    private bool meleeAttackCommitted;
 
     [SerializeField]
     private bool logInputDebug = true;
@@ -72,6 +82,41 @@ public sealed class PlayerInputReader : MonoBehaviour
         inputActions != null &&
         inputActions.Player.MeleeAttack.WasPressedThisFrame();
 
+    /// <summary>Identifies whether Q or gamepad right shoulder triggered Melee Attack this frame.</summary>
+    public MeleeAttackInputSource MeleeAttackSourceThisFrame
+    {
+        get
+        {
+            if (!MeleeAttackPressedThisFrame || inputActions == null)
+            {
+                return MeleeAttackInputSource.None;
+            }
+
+            InputControl activeControl = inputActions.Player.MeleeAttack.activeControl;
+            if (activeControl == null)
+            {
+                return MeleeAttackInputSource.None;
+            }
+
+            if (activeControl.device is Gamepad &&
+                activeControl.path.EndsWith("/rightShoulder", StringComparison.OrdinalIgnoreCase))
+            {
+                return MeleeAttackInputSource.GamepadRightShoulder;
+            }
+
+            if (activeControl.device is Keyboard &&
+                activeControl.path.EndsWith("/q", StringComparison.OrdinalIgnoreCase))
+            {
+                return MeleeAttackInputSource.KeyboardQ;
+            }
+
+            return MeleeAttackInputSource.None;
+        }
+    }
+
+    /// <summary>Returns true while a committed melee attack suppresses conflicting inputs.</summary>
+    public bool IsMeleeAttackCommitted => meleeAttackCommitted;
+
     /// <summary>Returns true while Quick Step is held.</summary>
     public bool QuickStepHeld =>
         CanUseCombatInput &&
@@ -86,29 +131,29 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     /// <summary>Returns the current vertical climb input, intended for ladder contexts.</summary>
     public float ClimbInput =>
-        CanReadGameplayInput && inputActions != null
+        CanReadGameplayInput && !meleeAttackCommitted && inputActions != null
             ? inputActions.Player.Climb.ReadValue<float>()
             : 0f;
 
     /// <summary>Returns true during the frame in which the upward climb input is pressed.</summary>
     public bool ClimbUpPressedThisFrame =>
-        CanReadGameplayInput && climbUpPressedThisFrame;
+        CanReadGameplayInput && !meleeAttackCommitted && climbUpPressedThisFrame;
 
     /// <summary>Returns true during the frame in which Interact is pressed.</summary>
     public bool InteractPressedThisFrame =>
-        CanUseCombatInput &&
+        CanUseGameplayActionInput &&
         inputActions != null &&
         inputActions.Player.Interact.WasPressedThisFrame();
 
     /// <summary>Returns true while Interact is held.</summary>
     public bool InteractHeld =>
-        CanUseCombatInput &&
+        CanUseGameplayActionInput &&
         inputActions != null &&
         inputActions.Player.Interact.IsPressed();
 
     /// <summary>Returns true during the frame in which the healing-item action is pressed.</summary>
     public bool UseHealingItemPressedThisFrame =>
-        CanUseCombatInput &&
+        CanUseGameplayActionInput &&
         inputActions != null &&
         inputActions.Player.UseHealingItem.WasPressedThisFrame();
 
@@ -190,12 +235,14 @@ public sealed class PlayerInputReader : MonoBehaviour
     /// <summary>Returns true while the Jump action is held.</summary>
     public bool JumpHeld =>
         CanReadGameplayInput &&
+        !meleeAttackCommitted &&
         inputActions != null &&
         inputActions.Player.Jump.IsPressed();
 
     /// <summary>Returns true during the frame in which the Jump action is released.</summary>
     public bool JumpReleasedThisFrame =>
         CanReadGameplayInput &&
+        !meleeAttackCommitted &&
         inputActions != null &&
         inputActions.Player.Jump.WasReleasedThisFrame();
 
@@ -203,12 +250,17 @@ public sealed class PlayerInputReader : MonoBehaviour
         GameManager.Instance == null ||
         !GameManager.Instance.IsGameplayInputLocked;
 
-    private bool CanUseCombatInput =>
+    private bool CanUseGameplayActionInput =>
         CanReadGameplayInput &&
         (player == null || !player.IsOnLadder);
 
+    private bool CanUseCombatInput =>
+        CanUseGameplayActionInput &&
+        !meleeAttackCommitted;
+
     private bool IsLadderGrabBindingPressed =>
         CanReadGameplayInput &&
+        !meleeAttackCommitted &&
         grabLadderAction != null &&
         grabLadderAction.WasPressedThisFrame();
 
@@ -229,6 +281,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         inputActions?.Player.Disable();
         ClearGameplayInput();
+        meleeAttackCommitted = false;
     }
 
     private void OnDestroy()
@@ -265,10 +318,14 @@ public sealed class PlayerInputReader : MonoBehaviour
         UpdateClimbInput();
         LogEquipmentScroll();
 
-        if (inputActions.Player.Jump.WasPressedThisFrame())
+        if (!meleeAttackCommitted && inputActions.Player.Jump.WasPressedThisFrame())
         {
             lastJumpPressedTime = Time.time;
             LogInput("Jump");
+        }
+        else if (meleeAttackCommitted)
+        {
+            ConsumeJumpBuffer();
         }
 
         LogButtonState(inputActions.Player.FireThrow, "Fire / Throw", true);
@@ -292,6 +349,7 @@ public sealed class PlayerInputReader : MonoBehaviour
         float clampedDuration = Mathf.Max(0f, bufferDuration);
 
         return CanReadGameplayInput &&
+               !meleeAttackCommitted &&
                Time.time - lastJumpPressedTime <= clampedDuration;
     }
 
@@ -299,6 +357,22 @@ public sealed class PlayerInputReader : MonoBehaviour
     public void ConsumeJumpBuffer()
     {
         lastJumpPressedTime = float.NegativeInfinity;
+    }
+
+    /// <summary>Enables or clears the selective lock for committed melee attacks.</summary>
+    public void SetMeleeAttackCommitted(bool committed)
+    {
+        if (meleeAttackCommitted == committed)
+        {
+            return;
+        }
+
+        meleeAttackCommitted = committed;
+        ConsumeJumpBuffer();
+        climbUpPressedThisFrame = false;
+        previousClimbInput = inputActions != null
+            ? inputActions.Player.Climb.ReadValue<float>()
+            : 0f;
     }
 
     private void ClearGameplayInput()

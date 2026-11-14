@@ -46,7 +46,7 @@ internal static class ItemInventoryModelValidationMenu
             ValidatePlayerAmmoCompatibilityFacade();
             ValidatePickupTransactions();
 
-            Debug.Log("Inventory model checks passed: stacking, split/merge, partial pickup acceptance, placement, rotation, resize protection, per-instance magazine state, notifications, starter loadout, reload transfers, compatibility facade, and pickup transactions.");
+            Debug.Log("Inventory model checks passed: stacking, split/merge, partial pickup acceptance, placement, rotation, resize protection, per-instance magazine state, notifications, starter loadout including protected Combat Knife, reload transfers, compatibility facade, and pickup transactions.");
         }
         catch (Exception exception)
         {
@@ -241,6 +241,8 @@ internal static class ItemInventoryModelValidationMenu
         WeaponDefinition rifleDefinition = AssetDatabase.LoadAssetAtPath<WeaponDefinition>("Assets/Weapons/Definitions/AssaultRifle.asset");
         AmmoDefinition pistolAmmoDefinition = AssetDatabase.LoadAssetAtPath<AmmoDefinition>("Assets/Items/Definitions/Ammo_Pistol.asset");
         AmmoDefinition rifleAmmoDefinition = AssetDatabase.LoadAssetAtPath<AmmoDefinition>("Assets/Items/Definitions/Ammo_Rifle.asset");
+        MeleeWeaponDefinition combatKnifeDefinition = AssetDatabase.LoadAssetAtPath<MeleeWeaponDefinition>("Assets/Items/Definitions/CombatKnife.asset");
+        Require(combatKnifeDefinition != null, "The protected Combat Knife definition should be available to starter-loadout validation.");
 
         Require(ItemInventory.TryCreateStartingLoadout(
                 pistolDefinition,
@@ -248,15 +250,20 @@ internal static class ItemInventoryModelValidationMenu
                 pistolAmmoDefinition,
                 rifleAmmoDefinition,
                 out ItemInventory starterInventory,
-                out InventoryOperationFailure failure),
+                out InventoryOperationFailure failure,
+                ItemInventory.DefaultPistolReserveRounds,
+                ItemInventory.DefaultRifleReserveRounds,
+                combatKnifeDefinition),
             $"The configured starter loadout should fit the default grid. Failure: {failure}.");
 
         Require(starterInventory.GridWidth == ItemInventory.CaseGridWidth && starterInventory.GridHeight == ItemInventory.CaseStage1Height, "The starter inventory should use 8×6 default dimensions.");
-        Require(starterInventory.Count == 6, "The starter loadout should contain two weapons and four ammo stacks.");
+        Require(starterInventory.Count == 7, "The starter loadout should contain two ranged weapons, one Combat Knife, and four ammo stacks.");
 
         int pistolAmmoTotal = 0;
         int rifleAmmoTotal = 0;
         int weaponCount = 0;
+        int meleeWeaponCount = 0;
+        ItemInstance starterKnife = null;
         for (int index = 0; index < starterInventory.Items.Count; index++)
         {
             ItemInstance item = starterInventory.Items[index];
@@ -274,7 +281,15 @@ internal static class ItemInventoryModelValidationMenu
             else if (item.Definition is WeaponDefinition weaponDefinition)
             {
                 weaponCount++;
-                Require(item.LoadedRounds == weaponDefinition.MagazineCapacity, "Each starter weapon should have an independent full magazine.");
+                Require(item.LoadedRounds == weaponDefinition.MagazineCapacity, "Each starter ranged weapon should have an independent full magazine.");
+            }
+            else if (item.Definition is MeleeWeaponDefinition meleeDefinition)
+            {
+                starterKnife = item;
+                meleeWeaponCount++;
+                Require(meleeDefinition.StableItemId == "weapon.combat_knife", "The starter melee item should use the stable Combat Knife ID.");
+                Require(Mathf.Approximately(meleeDefinition.Damage, 10f) && Mathf.Approximately(meleeDefinition.AttackRange, 1.5f) && Mathf.Approximately(meleeDefinition.AttackCooldown, 0.6f), "The carried Combat Knife should use its authored strong melee stats.");
+                Require(meleeDefinition.CanBeStored && !meleeDefinition.CanBeSold && !meleeDefinition.CanBeDiscarded, "The Combat Knife should remain storable but protected from sale and discard.");
             }
 
             Require(starterInventory.GetItemAt(item.GridPosition) == item, "Each starter item should occupy its recorded grid position.");
@@ -282,7 +297,15 @@ internal static class ItemInventoryModelValidationMenu
 
         Require(pistolAmmoTotal == ItemInventory.DefaultPistolReserveRounds, "The starter Pistol ammo total should be 160 rounds.");
         Require(rifleAmmoTotal == ItemInventory.DefaultRifleReserveRounds, "The starter Rifle ammo total should be 240 rounds.");
-        Require(weaponCount == 2, "The starter loadout should contain exactly two production weapon instances.");
+        Require(weaponCount == 2, "The starter loadout should contain exactly two production ranged weapon instances.");
+        Require(meleeWeaponCount == 1 && starterKnife != null, "The starter loadout should contain exactly one protected Combat Knife instance.");
+
+        InventoryOperationResult discardResult = starterInventory.TryDiscardItem(starterKnife.InstanceId, out _);
+        Require(!discardResult.Succeeded && discardResult.Failure == InventoryOperationFailure.ProtectedItem,
+            "The Combat Knife must be rejected by the discard transaction.");
+        InventoryOperationResult transferResult = starterInventory.TryTakeItem(starterKnife.InstanceId, out ItemInstance transferredKnife);
+        Require(transferResult.Succeeded && ReferenceEquals(transferredKnife, starterKnife),
+            "The protected Combat Knife should still be transferable out of the carry container for storage.");
     }
     private static void ValidateReloadAmmoBridge()
     {

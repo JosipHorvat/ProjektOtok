@@ -11,6 +11,7 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
     public const int SecondaryWeaponSlotIndex = 1;
     private const string PrimaryWeaponSlotLabel = "PrimaryWeapon";
     private const string SecondaryWeaponSlotLabel = "SecondaryWeapon";
+    private const string CombatKnifeStableItemId = "weapon.combat_knife";
     public const int DefaultStartingCredits = 500;
 
     [Header("Starter weapon definitions")]
@@ -18,6 +19,8 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
     [SerializeField] private WeaponDefinition startingPistolDefinition;
     [Tooltip("Existing Assault Rifle definition placed in the starter carry grid.")]
     [SerializeField] private WeaponDefinition startingAssaultRifleDefinition;
+    [Tooltip("Protected Combat Knife definition placed in the starter carry grid and recognized in saves/stash.")]
+    [SerializeField] private MeleeWeaponDefinition startingCombatKnifeDefinition;
 
     [Header("Starter ammunition definitions")]
     [Tooltip("Ammo item definition used for the player's Pistol reserve rounds.")]
@@ -1134,6 +1137,7 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
         }
 
         ValidateInstalledAttachmentReferences(restoredInventory, restoredInstalledAttachmentItems);
+        EnsureCombatKnifeOwnership(restoredInventory, restoredStashItems);
 
         string requestedEquippedWeaponId = savedState.equippedWeaponInstanceId ?? string.Empty;
         ItemInstance selectedWeapon = string.IsNullOrWhiteSpace(requestedEquippedWeaponId)
@@ -1694,6 +1698,76 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
         }
     }
 
+    private void EnsureCombatKnifeOwnership(ItemInventory restoredInventory, List<ItemInstance> restoredStashItems)
+    {
+        if (startingCombatKnifeDefinition == null || restoredInventory == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<ItemInstance> carriedItems = restoredInventory.Items;
+        for (int index = 0; index < carriedItems.Count; index++)
+        {
+            if (IsCombatKnifeDefinition(carriedItems[index] != null ? carriedItems[index].Definition : null))
+            {
+                return;
+            }
+        }
+
+        for (int index = 0; index < restoredStashItems.Count; index++)
+        {
+            if (IsCombatKnifeDefinition(restoredStashItems[index] != null ? restoredStashItems[index].Definition : null))
+            {
+                return;
+            }
+        }
+
+        if (ContainsUnresolvedCombatKnife(unresolvedCarryItems) || ContainsUnresolvedCombatKnife(unresolvedStashItems))
+        {
+            return;
+        }
+
+        InventoryOperationResult carryResult = restoredInventory.TryAddQuantity(startingCombatKnifeDefinition, 1, true);
+        if (carryResult.Completed)
+        {
+            return;
+        }
+
+        if (startingCombatKnifeDefinition.CanBeStored && ItemInstance.TryCreate(startingCombatKnifeDefinition, 1, out ItemInstance storedKnife))
+        {
+            storedKnife.SetOwningPlayerContainer(this);
+            restoredStashItems.Add(storedKnife);
+            return;
+        }
+
+        Debug.LogWarning($"Could not restore the owned Combat Knife into carry or stash. Failure: {carryResult.Failure}.", this);
+    }
+
+    private static bool IsCombatKnifeDefinition(ItemDefinition definition)
+    {
+        return definition != null &&
+               string.Equals(definition.StableItemId, CombatKnifeStableItemId, StringComparison.Ordinal);
+    }
+
+    private static bool ContainsUnresolvedCombatKnife(List<ItemInstanceSaveData> records)
+    {
+        if (records == null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < records.Count; index++)
+        {
+            if (records[index] != null &&
+                string.Equals(records[index].stableItemId, CombatKnifeStableItemId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private ItemDefinition ResolveDefinition(string stableItemId)
     {
         if (string.IsNullOrWhiteSpace(stableItemId))
@@ -1726,6 +1800,7 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
         {
             startingPistolDefinition,
             startingAssaultRifleDefinition,
+            startingCombatKnifeDefinition,
             pistolAmmoDefinition,
             rifleAmmoDefinition
         };
@@ -1794,6 +1869,16 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
         out ItemInventory starterInventory,
         out InventoryOperationFailure failure)
     {
+        starterInventory = null;
+        failure = InventoryOperationFailure.None;
+        if (startingCombatKnifeDefinition == null ||
+            !string.Equals(startingCombatKnifeDefinition.StableItemId, CombatKnifeStableItemId, StringComparison.Ordinal) ||
+            startingCombatKnifeDefinition.MaximumStackSize != 1)
+        {
+            failure = InventoryOperationFailure.InvalidDefinition;
+            return false;
+        }
+
         if (!ItemInventory.TryCreateStartingLoadout(
                 startingPistolDefinition,
                 startingAssaultRifleDefinition,
@@ -1802,7 +1887,8 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
                 out starterInventory,
                 out failure,
                 startingPistolReserveRounds,
-                startingRifleReserveRounds))
+                startingRifleReserveRounds,
+                startingCombatKnifeDefinition))
         {
             return false;
         }
@@ -1910,7 +1996,7 @@ public sealed class PlayerItemInventory : MonoBehaviour, ISaveManager
         if (!TryCreateConfiguredStarterInventory(out inventory, out InventoryOperationFailure failure))
         {
             inventory = null;
-            Debug.LogError($"Could not create the starter item inventory. Failure: {failure}. Assign valid Pistol, Assault Rifle, and ammo item definitions to {nameof(PlayerItemInventory)}.", this);
+            Debug.LogError($"Could not create the starter item inventory. Failure: {failure}. Assign valid Pistol, Assault Rifle, Combat Knife, and ammo item definitions to {nameof(PlayerItemInventory)}.", this);
             return;
         }
 

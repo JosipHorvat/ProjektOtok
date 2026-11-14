@@ -210,6 +210,7 @@ public sealed class PlayerReloadController : MonoBehaviour
     private bool IsActiveReloadSnapshot(WeaponDefinition.ReloadStyle expectedStyle)
     {
         return isReloading &&
+               (inputReader == null || !inputReader.IsMeleeAttackCommitted) &&
                activeReloadStyle == expectedStyle &&
                reloadingWeapon != null &&
                reloadingDefinition != null &&
@@ -237,7 +238,8 @@ public sealed class PlayerReloadController : MonoBehaviour
 
     private bool IsGameplayInputBlocked()
     {
-        return GameManager.Instance != null && GameManager.Instance.IsGameplayInputLocked;
+        return GameManager.Instance != null && GameManager.Instance.IsGameplayInputLocked ||
+               inputReader != null && inputReader.IsMeleeAttackCommitted;
     }
 
     private void FinishReload()

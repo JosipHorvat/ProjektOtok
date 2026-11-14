@@ -12,6 +12,7 @@ public class Player : MonoBehaviour
     private const float JumpApexVelocityThreshold = 2.5f;
     private const float LadderGrabInputDeadZone = 0.1f;
     private const float MinimumQuickStepTravelDuration = 0.01f;
+    private const float CommittedMeleeMovementMultiplier = 0.4f;
     private const string OnLadderAnimatorParameter = "OnLadder";
     private const string ClimbAnimatorParameter = "Climb";
     private const string LadderAnimatorLayerName = "Ladder";
@@ -160,7 +161,19 @@ public class Player : MonoBehaviour
 
     #region Public State Data
 
-    public Vector2 MoveInput => InputReader.MoveInput;
+    public Vector2 MoveInput
+    {
+        get
+        {
+            Vector2 movementInput = InputReader.MoveInput;
+            if (InputReader.IsMeleeAttackCommitted)
+            {
+                movementInput.x *= CommittedMeleeMovementMultiplier;
+            }
+
+            return movementInput;
+        }
+    }
 
     public float QuickStepSpeed =>
         quickStepDistance / Mathf.Max(quickStepTravelDuration, MinimumQuickStepTravelDuration);

@@ -22,6 +22,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     private const float RelaxRotationSpeed = 360f;
     private const float HoldOffsetBlendSpeed = 6f;
     private const string AimAnimatorParameter = "Aim";
+    private const string RangedWeaponEquippedAnimatorParameter = "HasRangedWeapon";
 
     private const float AimBlendInSpeed = 8f;
     private const float AimBlendOutSpeed = 6f;
@@ -185,6 +186,8 @@ public sealed class WeaponHoldController : MonoBehaviour
     private float currentRecoilDegrees;
     private float recoilRecoveryDegreesPerSecond = 28f;
     private bool aimPoseReady;
+    private bool hasRangedWeaponEquippedAnimatorParameter;
+    private int rangedWeaponEquippedAnimatorParameterHash;
     private Quaternion torsoRestLocalRotation;
     private bool hasTorsoRestLocalRotation;
 
@@ -235,6 +238,11 @@ public sealed class WeaponHoldController : MonoBehaviour
     private void Awake()
     {
         animator = GetComponent<Animator>();
+        hasRangedWeaponEquippedAnimatorParameter = TryGetAnimatorBoolParameterHash(
+            animator,
+            RangedWeaponEquippedAnimatorParameter,
+            out rangedWeaponEquippedAnimatorParameterHash);
+        UpdateRangedWeaponAnimatorParameter();
         player = GetComponentInParent<Player>();
         playerItemInventory = GetComponentInParent<PlayerItemInventory>();
         reloadController = GetComponent<PlayerReloadController>();
@@ -354,6 +362,7 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private void LateUpdate()
     {
+        UpdateRangedWeaponAnimatorParameter();
         if (isLadderMode)
         {
             aimPoseReady = false;
@@ -363,6 +372,21 @@ public sealed class WeaponHoldController : MonoBehaviour
             }
 
             SetArmWeights(1f, 1f, false);
+            return;
+        }
+
+        if (inputReader != null && inputReader.IsMeleeAttackCommitted)
+        {
+            firePoseUntilTime = 0f;
+            aimPoseReady = false;
+            wasAiming = false;
+            hasHeadBaseLocalRotation = false;
+            if (animator != null)
+            {
+                animator.SetBool(AimAnimatorParameter, false);
+            }
+
+            BlendArmWeights(0f, 0f);
             return;
         }
 
@@ -902,6 +926,76 @@ public sealed class WeaponHoldController : MonoBehaviour
         }
     }
 
+    /// <summary>Resolves mouse or gamepad aim into a world direction without requiring an equipped firearm.</summary>
+    public bool TryResolveAimDirection(Vector3 worldOrigin, out Vector2 worldDirection)
+    {
+        worldDirection = Vector2.zero;
+        if (inputReader == null)
+        {
+            inputReader = GetComponentInParent<PlayerInputReader>();
+        }
+
+        if (player == null)
+        {
+            player = GetComponentInParent<Player>();
+        }
+
+        if (aimCamera == null)
+        {
+            aimCamera = Camera.main;
+        }
+
+        if (inputReader == null)
+        {
+            return false;
+        }
+
+        Vector2 aimInput = inputReader.AimInput;
+        Vector3 resolvedDirection;
+        if (inputReader.AimUsesGamepad)
+        {
+            if (aimInput.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
+            {
+                return false;
+            }
+
+            Vector3 cameraRight = aimCamera != null ? aimCamera.transform.right : Vector3.right;
+            Vector3 cameraUp = aimCamera != null ? aimCamera.transform.up : Vector3.up;
+            resolvedDirection = cameraRight * aimInput.x + cameraUp * aimInput.y;
+        }
+        else
+        {
+            if (aimCamera == null)
+            {
+                return false;
+            }
+
+            float cameraDepth = Vector3.Dot(worldOrigin - aimCamera.transform.position, aimCamera.transform.forward);
+            if (cameraDepth <= 0f)
+            {
+                return false;
+            }
+
+            Vector3 mouseWorldPosition = aimCamera.ScreenToWorldPoint(new Vector3(aimInput.x, aimInput.y, cameraDepth));
+            resolvedDirection = mouseWorldPosition - worldOrigin;
+            resolvedDirection.z = 0f;
+        }
+
+        Vector2 planarDirection = new Vector2(resolvedDirection.x, resolvedDirection.y);
+        if (planarDirection.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
+        {
+            return false;
+        }
+
+        worldDirection = planarDirection.normalized;
+        if (player != null && Mathf.Abs(worldDirection.x) > AimFacingDeadZone)
+        {
+            player.SetFacingDirection(worldDirection.x > 0f ? 1 : -1);
+        }
+
+        return true;
+    }
+
     private bool TryGetAimDirection(out Vector2 localAimDirection, out Vector3 worldAimDirection)
     {
         localAimDirection = Vector2.zero;
@@ -956,6 +1050,34 @@ public sealed class WeaponHoldController : MonoBehaviour
         Transform pivotParent = weaponAimPivot.parent != null ? weaponAimPivot.parent : transform;
         localAimDirection = pivotParent.InverseTransformDirection(worldAimDirection);
         return localAimDirection.sqrMagnitude >= MinimumAimDirectionSqrMagnitude;
+    }
+
+    private void UpdateRangedWeaponAnimatorParameter()
+    {
+        if (hasRangedWeaponEquippedAnimatorParameter && animator != null)
+        {
+            animator.SetBool(rangedWeaponEquippedAnimatorParameterHash, currentWeapon != null);
+        }
+    }
+
+    private static bool TryGetAnimatorBoolParameterHash(Animator targetAnimator, string parameterName, out int parameterHash)
+    {
+        parameterHash = 0;
+        if (targetAnimator == null)
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in targetAnimator.parameters)
+        {
+            if (parameter.name == parameterName && parameter.type == AnimatorControllerParameterType.Bool)
+            {
+                parameterHash = Animator.StringToHash(parameterName);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Transform GetChainRoot(LimbSolver2D solver)
