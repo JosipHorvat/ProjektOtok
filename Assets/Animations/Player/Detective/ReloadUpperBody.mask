@@ -33,3 +33,7 @@ AvatarMask:
     m_Weight: 1
   - m_Path: root/pelvis/abdomen/chest/shoulder_r/arm_r/forearm_r/hand_r
     m_Weight: 1
+  - m_Path: WeaponAimPivot
+    m_Weight: 0
+  - m_Path: WeaponAimPivot/WeaponSocket
+    m_Weight: 1

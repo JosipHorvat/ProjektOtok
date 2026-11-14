@@ -12,12 +12,16 @@ public class Player : MonoBehaviour
     private const float JumpApexVelocityThreshold = 2.5f;
     private const float LadderGrabInputDeadZone = 0.1f;
     private const float MinimumQuickStepTravelDuration = 0.01f;
+    private const float MinimumLocomotionSpeedDenominator = 0.01f;
+    private const float MinimumLocomotionAnimationDampTime = 0.01f;
+    private const float DefaultLocomotionAnimationDampTime = 0.12f;
     private const float CommittedMeleeMovementMultiplier = 0.4f;
     private const string OnLadderAnimatorParameter = "OnLadder";
     private const string ClimbAnimatorParameter = "Climb";
     private const string LadderAnimatorLayerName = "Ladder";
     private const string LadderFacingRightAnimatorParameter = "LadderFacingRight";
     private const string QuickStepAnimatorTrigger = "QuickStep";
+    private const string LocomotionSpeed = "LocomotionSpeed";
     private const string RunSpeedAnimatorParameter = "RunSpeed";
 
     #endregion
@@ -33,6 +37,8 @@ public class Player : MonoBehaviour
     private WeaponHoldController weaponHoldController;
     private bool hasQuickStepAnimatorTrigger;
     private bool hasRunSpeedAnimatorParameter;
+    private int locomotionSpeedAnimatorParameterHash;
+    private bool hasLocomotionSpeedAnimatorParameter;
     private LadderClimbVolume availableLadder;
     private LadderClimbVolume activeLadder;
     private readonly List<Collider2D> ladderIgnoredGroundColliders = new List<Collider2D>();
@@ -54,6 +60,13 @@ public class Player : MonoBehaviour
     [SerializeField, Min(0f)] private float quickStepRecoveryDuration = 0.08f;
     [SerializeField, Min(0f)] private float quickStepRunHoldThreshold = 0.12f;
     [SerializeField, Range(1f, 2f)] private float runSpeedMultiplier = 1.35f;
+
+    #endregion
+
+    #region Animation Settings
+
+    [SerializeField, Min(MinimumLocomotionAnimationDampTime)]
+    private float locomotionAnimationDampTime = DefaultLocomotionAnimationDampTime;
 
     #endregion
 
@@ -235,6 +248,7 @@ public class Player : MonoBehaviour
     {
         stateMachine.CurrentState?.Update();
         UpdateRunAnimationSpeed();
+        UpdateLocomotionAnimationSpeed();
         TryGrabNearbyLadder();
         TryEnterNearbyLadder();
     }
@@ -810,6 +824,22 @@ public class Player : MonoBehaviour
         }
     }
 
+    private void UpdateLocomotionAnimationSpeed()
+    {
+        if (anim != null && rb != null && hasLocomotionSpeedAnimatorParameter)
+        {
+            float normalizedHorizontalSpeed = Mathf.Clamp01(
+                Mathf.Abs(rb.linearVelocity.x) /
+                Mathf.Max(moveSpeed, MinimumLocomotionSpeedDenominator));
+
+            anim.SetFloat(
+                locomotionSpeedAnimatorParameterHash,
+                normalizedHorizontalSpeed,
+                Mathf.Max(locomotionAnimationDampTime, MinimumLocomotionAnimationDampTime),
+                Time.deltaTime);
+        }
+    }
+
     private static bool HasAnimatorParameter(
         Animator animator,
         string parameterName,
@@ -840,17 +870,18 @@ public class Player : MonoBehaviour
         stateMachine =
             new PlayerStateMachine();
 
+        // Locomotion blend trees use speed; grounded states no longer need animation bools.
         idleState =
             new PlayerIdleState(
                 this,
                 stateMachine,
-                "Idle");
+                string.Empty);
 
         moveState =
             new PlayerMoveState(
                 this,
                 stateMachine,
-                "Move");
+                string.Empty);
 
         jumpState =
             new PlayerJumpState(
@@ -886,6 +917,11 @@ public class Player : MonoBehaviour
         hasRunSpeedAnimatorParameter = HasAnimatorParameter(
             anim,
             RunSpeedAnimatorParameter,
+            AnimatorControllerParameterType.Float);
+        locomotionSpeedAnimatorParameterHash = Animator.StringToHash(LocomotionSpeed);
+        hasLocomotionSpeedAnimatorParameter = HasAnimatorParameter(
+            anim,
+            LocomotionSpeed,
             AnimatorControllerParameterType.Float);
 
         playerSquash =
