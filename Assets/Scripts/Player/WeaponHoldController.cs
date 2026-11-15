@@ -23,6 +23,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     private const float HoldOffsetBlendSpeed = 6f;
     private const string AimAnimatorParameter = "Aim";
     private const string RangedWeaponEquippedAnimatorParameter = "HasRangedWeapon";
+    private const string BackSocketPath = "root/pelvis/abdomen/chest";
 
     private const float AimBlendInSpeed = 8f;
     private const float AimBlendOutSpeed = 6f;
@@ -154,10 +155,13 @@ public sealed class WeaponHoldController : MonoBehaviour
     [SerializeField] private float ladderBackLocalRotation = 60f;
 
     private bool isLadderMode;
-    private Transform weaponParentBeforeLadder;
-    private Vector3 weaponPositionBeforeLadder;
-    private Quaternion weaponRotationBeforeLadder;
-    private Vector3 weaponScaleBeforeLadder;
+    private bool isMeleeMode;
+    private HeldWeapon stowedWeapon;
+    private Transform weaponParentBeforeStow;
+    private Vector3 weaponPositionBeforeStow;
+    private Quaternion weaponRotationBeforeStow;
+    private Vector3 weaponScaleBeforeStow;
+    private PlayerMeleeAttackController meleeAttackController;
 
 
     private int testWeaponIndex = -1;
@@ -191,7 +195,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     private Quaternion torsoRestLocalRotation;
     private bool hasTorsoRestLocalRotation;
 
-    /// <summary>Weapon currently in the hands, or null when unarmed.</summary>
+    /// <summary>Equipped ranged weapon, including when temporarily stowed for melee or ladder traversal; null when unarmed.</summary>
     public HeldWeapon CurrentWeapon => currentWeapon;
 
     /// <summary>Owned weapon item instance currently equipped, or null when unarmed.</summary>
@@ -215,7 +219,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Requests a short raised weapon pose for a tap-fired shot.</summary>
     public void RequestFirePose(float duration)
     {
-        if (currentWeapon == null || isLadderMode)
+        if (currentWeapon == null || isLadderMode || isMeleeMode)
         {
             return;
         }
@@ -226,7 +230,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Adds upward recoil to the weapon aim and configures its recovery speed.</summary>
     public void ApplyShotRecoil(float recoilDegrees, float recoveryDegreesPerSecond)
     {
-        if (currentWeapon == null || isLadderMode)
+        if (currentWeapon == null || isLadderMode || isMeleeMode)
         {
             return;
         }
@@ -246,6 +250,7 @@ public sealed class WeaponHoldController : MonoBehaviour
         player = GetComponentInParent<Player>();
         playerItemInventory = GetComponentInParent<PlayerItemInventory>();
         reloadController = GetComponent<PlayerReloadController>();
+        meleeAttackController = GetComponentInParent<PlayerMeleeAttackController>();
 
         if (aimCamera == null)
         {
@@ -278,6 +283,21 @@ public sealed class WeaponHoldController : MonoBehaviour
         }
 
         supportArmLength = MeasureChainLength(supportArmSolver);
+    }
+
+    private void OnEnable()
+    {
+        isLadderMode = player != null && player.IsOnLadder;
+        UpdateWeaponStow();
+    }
+
+    private void OnDisable()
+    {
+        meleeAttackController?.CancelMeleeAttack();
+        isMeleeMode = false;
+        isLadderMode = false;
+        UpdateWeaponStow();
+        SetArmWeights(0f, 0f, true);
     }
 
     /// <summary>Equips the saved active weapon instance after the player's inventory has been restored.</summary>
@@ -375,18 +395,9 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
-        if (inputReader != null && inputReader.IsMeleeAttackCommitted)
+        if (isMeleeMode || inputReader != null && inputReader.IsMeleeAttackCommitted)
         {
-            firePoseUntilTime = 0f;
-            aimPoseReady = false;
-            wasAiming = false;
-            hasHeadBaseLocalRotation = false;
-            if (animator != null)
-            {
-                animator.SetBool(AimAnimatorParameter, false);
-            }
-
-            BlendArmWeights(0f, 0f);
+            SetMeleeMode(true);
             return;
         }
 
@@ -609,6 +620,7 @@ public sealed class WeaponHoldController : MonoBehaviour
         currentAngle = currentWeapon.RelaxedAngle;
         ApplyWeaponHoldOffset();
         PlaceHandTargets();
+        UpdateWeaponStow();
         return true;
     }
     /// <summary>Equips an owned weapon instance using the matching prefab from this controller's visual catalog.</summary>
@@ -647,6 +659,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     /// <summary>Removes the held weapon; arms fall back to animation while preserving its owned instance state.</summary>
     public void Unequip()
     {
+        meleeAttackController?.CancelMeleeAttack();
         reloadController?.CancelReload();
         if (currentWeaponItem != null && playerItemInventory != null && playerItemInventory.Inventory != null)
         {
@@ -656,6 +669,7 @@ public sealed class WeaponHoldController : MonoBehaviour
         playerItemInventory?.SetEquippedWeaponInstanceId(string.Empty);
         currentAmmoState = null;
         currentWeaponItem = null;
+        RestoreStowedWeapon();
         if (currentWeapon == null)
         {
             return;
@@ -722,62 +736,107 @@ public sealed class WeaponHoldController : MonoBehaviour
             return;
         }
 
+        // Transfer an existing melee stow directly to the ladder without overwriting its hand pose snapshot.
+        isLadderMode = isClimbing;
         if (isClimbing)
         {
+            meleeAttackController?.CancelMeleeAttack();
             reloadController?.CancelReload();
         }
 
-        isLadderMode = isClimbing;
+        ResetAimForStow();
+        UpdateWeaponStow();
+        if (isMeleeMode)
+        {
+            SetArmWeights(0f, 0f, true);
+        }
+        else
+        {
+            SetArmWeights(isLadderMode || currentWeapon != null ? 1f : 0f, isLadderMode ? 1f : 0f, true);
+        }
+    }
+
+    /// <summary>Stows the equipped gun using the ladder back pose and immediately releases both arm IK solvers for melee animation.</summary>
+    public void SetMeleeMode(bool active)
+    {
+        isMeleeMode = active;
+        if (active)
+        {
+            ResetAimForStow();
+        }
+
+        UpdateWeaponStow();
+        if (active)
+        {
+            SetArmWeights(0f, 0f, true);
+        }
+        else if (isLadderMode)
+        {
+            SetArmWeights(1f, 1f, true);
+        }
+    }
+
+    private void ResetAimForStow()
+    {
         if (wasAiming && aimHead != null && hasHeadBaseLocalRotation)
         {
             aimHead.localRotation = headBaseLocalRotation;
         }
 
         wasAiming = false;
-
-        if (isLadderMode)
+        hasHeadBaseLocalRotation = false;
+        aimPoseReady = false;
+        firePoseUntilTime = 0f;
+        currentRecoilDegrees = 0f;
+        if (animator != null)
         {
-            firePoseUntilTime = 0f;
-            currentRecoilDegrees = 0f;
-            if (currentWeapon != null)
-            {
-                weaponParentBeforeLadder = currentWeapon.transform.parent;
-                weaponPositionBeforeLadder = currentWeapon.transform.localPosition;
-                weaponRotationBeforeLadder = currentWeapon.transform.localRotation;
-                weaponScaleBeforeLadder = currentWeapon.transform.localScale;
+            animator.SetBool(AimAnimatorParameter, false);
+        }
+    }
 
-                Transform backSocket = transform.Find("root/pelvis/abdomen/chest");
-                if (backSocket == null)
-                {
-                    backSocket = transform;
-                }
+    private void UpdateWeaponStow()
+    {
+        if (stowedWeapon != null && (stowedWeapon != currentWeapon || !isLadderMode && !isMeleeMode))
+        {
+            RestoreStowedWeapon();
+        }
 
-                currentWeapon.transform.SetParent(backSocket, false);
-                currentWeapon.transform.localPosition = ladderBackLocalPosition;
-                currentWeapon.transform.localRotation = Quaternion.Euler(0f, 0f, ladderBackLocalRotation);
-                currentWeapon.transform.localScale = weaponScaleBeforeLadder;
-            }
-
-            if (animator != null)
-            {
-                animator.SetBool(AimAnimatorParameter, false);
-            }
-
-            SetArmWeights(1f, 1f, true);
+        if ((!isLadderMode && !isMeleeMode) || currentWeapon == null || stowedWeapon == currentWeapon)
+        {
             return;
         }
 
-        if (currentWeapon != null && weaponParentBeforeLadder != null)
+        stowedWeapon = currentWeapon;
+        Transform weaponTransform = stowedWeapon.transform;
+        weaponParentBeforeStow = weaponTransform.parent;
+        weaponPositionBeforeStow = weaponTransform.localPosition;
+        weaponRotationBeforeStow = weaponTransform.localRotation;
+        weaponScaleBeforeStow = weaponTransform.localScale;
+
+        Transform backSocket = transform.Find(BackSocketPath);
+        weaponTransform.SetParent(backSocket != null ? backSocket : transform, false);
+        weaponTransform.localPosition = ladderBackLocalPosition;
+        weaponTransform.localRotation = Quaternion.Euler(0f, 0f, ladderBackLocalRotation);
+        weaponTransform.localScale = weaponScaleBeforeStow;
+    }
+
+    private void RestoreStowedWeapon()
+    {
+        if (stowedWeapon != null)
         {
-            currentWeapon.transform.SetParent(weaponParentBeforeLadder, false);
-            currentWeapon.transform.localPosition = weaponPositionBeforeLadder;
-            currentWeapon.transform.localRotation = weaponRotationBeforeLadder;
-            currentWeapon.transform.localScale = weaponScaleBeforeLadder;
-            PlaceHandTargets();
+            Transform weaponTransform = stowedWeapon.transform;
+            weaponTransform.SetParent(weaponParentBeforeStow != null ? weaponParentBeforeStow : weaponSocket, false);
+            weaponTransform.localPosition = weaponPositionBeforeStow;
+            weaponTransform.localRotation = weaponRotationBeforeStow;
+            weaponTransform.localScale = weaponScaleBeforeStow;
+            if (currentWeapon == stowedWeapon)
+            {
+                PlaceHandTargets();
+            }
         }
 
-        weaponParentBeforeLadder = null;
-        SetArmWeights(currentWeapon != null ? 1f : 0f, 0f, true);
+        stowedWeapon = null;
+        weaponParentBeforeStow = null;
     }
 
     private void BeginAimIfNeeded()

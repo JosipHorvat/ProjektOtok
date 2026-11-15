@@ -12,6 +12,9 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     }
 
     private const string CombatKnifeStableItemId = "weapon.combat_knife";
+    private const string PlayerAnimatorPath = "PlayerAnimator";
+    private const string OffhandKnifePath = "root/pelvis/abdomen/chest/shoulder_r/arm_r/forearm_r/hand_r/CombatKnife_OffHand";
+    private const string SheathedKnifePath = "root/pelvis/hip/CombatKnife_Sheath";
     private const float BackupDamage = 5f;
     private const float BackupAttackRange = 1f;
     private const float BackupAttackCooldown = 0.8f;
@@ -21,6 +24,8 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     [SerializeField] private SpriteRenderer sheathedKnifeRenderer;
 
     private PlayerItemInventory playerItemInventory;
+    private PlayerMeleeAttackController attackController;
+    private Transform playerAnimatorTransform;
     private bool attackVisualActive;
 
     /// <summary>Gets the currently carried Combat Knife definition, or null when the strong knife is stored or absent.</summary>
@@ -34,12 +39,14 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
 
     private void Awake()
     {
+        attackVisualActive = false;
         ResolveReferences();
         RefreshVisuals();
     }
 
     private void OnEnable()
     {
+        attackVisualActive = false;
         ResolveReferences();
         if (playerItemInventory != null)
         {
@@ -56,7 +63,13 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
             playerItemInventory.Changed -= HandleInventoryChanged;
         }
 
+        attackController?.CancelMeleeAttack();
         attackVisualActive = false;
+        RefreshVisuals();
+    }
+
+    private void LateUpdate()
+    {
         RefreshVisuals();
     }
 
@@ -84,7 +97,7 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
         attackCooldown = BackupAttackCooldown;
     }
 
-    /// <summary>Shows the hand knife and hides the hip knife for the committed stab.</summary>
+    /// <summary>Shows the hand knife only during the committed attack's draw-to-resheath interval; otherwise shows the hip knife.</summary>
     public void SetAttackVisualActive(bool active)
     {
         attackVisualActive = active;
@@ -96,6 +109,39 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
         if (playerItemInventory == null)
         {
             playerItemInventory = GetComponent<PlayerItemInventory>();
+        }
+
+        if (attackController == null)
+        {
+            attackController = GetComponent<PlayerMeleeAttackController>();
+        }
+
+        if (playerAnimatorTransform == null)
+        {
+            playerAnimatorTransform = transform.Find(PlayerAnimatorPath);
+        }
+
+        if (playerAnimatorTransform == null)
+        {
+            return;
+        }
+
+        if (offhandKnifeRenderer == null)
+        {
+            Transform knifeTransform = playerAnimatorTransform.Find(OffhandKnifePath);
+            if (knifeTransform != null)
+            {
+                offhandKnifeRenderer = knifeTransform.GetComponent<SpriteRenderer>();
+            }
+        }
+
+        if (sheathedKnifeRenderer == null)
+        {
+            Transform knifeTransform = playerAnimatorTransform.Find(SheathedKnifePath);
+            if (knifeTransform != null)
+            {
+                sheathedKnifeRenderer = knifeTransform.GetComponent<SpriteRenderer>();
+            }
         }
     }
 
@@ -129,15 +175,17 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     private void RefreshVisuals()
     {
         ResolveReferences();
-        VisualMode = attackVisualActive ? MeleeVisualMode.Drawn : MeleeVisualMode.Sheathed;
+        bool isKnifeDrawn = isActiveAndEnabled && attackVisualActive &&
+            attackController != null && attackController.IsAttackCommitted;
+        VisualMode = isKnifeDrawn ? MeleeVisualMode.Drawn : MeleeVisualMode.Sheathed;
         if (offhandKnifeRenderer != null)
         {
-            offhandKnifeRenderer.enabled = attackVisualActive;
+            offhandKnifeRenderer.enabled = isKnifeDrawn;
         }
 
         if (sheathedKnifeRenderer != null)
         {
-            sheathedKnifeRenderer.enabled = !attackVisualActive;
+            sheathedKnifeRenderer.enabled = !isKnifeDrawn;
         }
     }
 }

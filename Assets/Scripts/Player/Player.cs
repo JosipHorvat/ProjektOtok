@@ -8,6 +8,7 @@ public class Player : MonoBehaviour
 
     private const float MinimumInput = PlayerState.HorizontalInputThreshold;
     private const float MinimumTangentHorizontal = 0.01f;
+    private const float MinimumGroundMovementVelocity = 0.01f;
     private const float GroundedVerticalVelocityThreshold = 0.1f;
     private const float JumpApexVelocityThreshold = 2.5f;
     private const float LadderGrabInputDeadZone = 0.1f;
@@ -53,6 +54,7 @@ public class Player : MonoBehaviour
     public float smoothMovement = 10f;
     public float acceleration = 120f;
     public float airDeceleration = 30f;
+    [SerializeField, Min(0f)] private float groundDeceleration = 30f;
 
     [Header("Quick Step and Run")]
     [SerializeField, Min(0f)] private float quickStepDistance = 1.7f;
@@ -81,6 +83,13 @@ public class Player : MonoBehaviour
 
     [SerializeField]
     private float maximumGroundSnapSpeed = 25f;
+
+    [SerializeField, Min(0f)]
+    private float groundTangentSmoothing = 15f;
+
+    [Tooltip("Proportional response used to correct small gaps to walkable ground.")]
+    [SerializeField, Min(0f)]
+    private float groundSnapResponse = 8f;
 
     [Tooltip("Extra cast distance used to keep ground contact stable over small gaps and slopes.")]
     [SerializeField]
@@ -284,12 +293,6 @@ public class Player : MonoBehaviour
         TriggerLandingSquash(impactSpeed);
 
         bool hasMovementInput = HasLiveMovementInput;
-
-        if (!hasMovementInput)
-        {
-            SetHorizontalVelocity(0f);
-        }
-
         stateMachine.ChangeState(
             hasMovementInput
                 ? moveState
@@ -545,6 +548,7 @@ public class Player : MonoBehaviour
         SetVerticalVelocity(groundingForce);
     }
 
+    /// <summary>Moves along walkable ground while preserving input release deceleration.</summary>
     public void ApplyGroundMovement(float horizontalInput)
     {
         if (!HasGroundContact)
@@ -554,40 +558,31 @@ public class Player : MonoBehaviour
             return;
         }
 
-        if (Mathf.Abs(horizontalInput) <= MinimumInput)
-        {
-            rb.linearVelocity = Vector2.zero;
-            return;
-        }
-
         Vector2 tangent = CurrentGroundInfo.Tangent;
-        float currentMoveSpeed = GetGroundMoveSpeed();
-
-        float targetHorizontalVelocity =
-            horizontalInput * currentMoveSpeed;
-
-        float horizontalVelocity = Mathf.MoveTowards(
-            rb.linearVelocity.x,
-            targetHorizontalVelocity,
-            smoothMovement * currentMoveSpeed * Time.fixedDeltaTime);
-
         float tangentHorizontal = Mathf.Max(
             Mathf.Abs(tangent.x),
             MinimumTangentHorizontal);
-
-        float slopeVerticalVelocity =
-            horizontalVelocity *
-            tangent.y /
-            tangentHorizontal;
-
-        if (slopeVerticalVelocity < 0f)
-            slopeVerticalVelocity -= slopeStickSpeed;
-
-        slopeVerticalVelocity -= GetGroundSnapSpeed();
+        bool hasMovementInput = Mathf.Abs(horizontalInput) > MinimumInput;
+        float currentMoveSpeed = GetGroundMoveSpeed();
+        float targetSurfaceVelocity = hasMovementInput
+            ? horizontalInput * currentMoveSpeed
+            : 0f;
+        float currentSurfaceVelocity = rb.linearVelocity.x / tangentHorizontal;
+        float movementRate = hasMovementInput
+            ? smoothMovement * currentMoveSpeed
+            : Mathf.Max(0f, groundDeceleration);
+        float surfaceVelocity = Mathf.MoveTowards(
+            currentSurfaceVelocity,
+            targetSurfaceVelocity,
+            Mathf.Max(0f, movementRate) * Time.fixedDeltaTime);
+        float horizontalVelocity = surfaceVelocity * Mathf.Abs(tangent.x);
 
         rb.linearVelocity = new Vector2(
             horizontalVelocity,
-            slopeVerticalVelocity);
+            GetGroundMovementVerticalVelocity(
+                horizontalVelocity,
+                tangent,
+                hasMovementInput));
     }
 
     /// <summary>Applies the committed quick-step movement while following the current ground slope.</summary>
@@ -601,27 +596,49 @@ public class Player : MonoBehaviour
         }
 
         Vector2 tangent = CurrentGroundInfo.Tangent;
-        float movementSpeed = Mathf.Max(0f, quickStepSpeed);
-        float targetHorizontalVelocity = horizontalInput * movementSpeed;
-        float horizontalVelocity = Mathf.MoveTowards(
-            rb.linearVelocity.x,
-            targetHorizontalVelocity,
-            smoothMovement * Mathf.Max(movementSpeed, moveSpeed) * Time.fixedDeltaTime);
-
         float tangentHorizontal = Mathf.Max(
             Mathf.Abs(tangent.x),
             MinimumTangentHorizontal);
+        float movementSpeed = Mathf.Max(0f, quickStepSpeed);
+        float targetSurfaceVelocity = horizontalInput * movementSpeed;
+        float currentSurfaceVelocity = rb.linearVelocity.x / tangentHorizontal;
+        float movementRate = smoothMovement * Mathf.Max(movementSpeed, moveSpeed);
+        float surfaceVelocity = Mathf.MoveTowards(
+            currentSurfaceVelocity,
+            targetSurfaceVelocity,
+            Mathf.Max(0f, movementRate) * Time.fixedDeltaTime);
+        float horizontalVelocity = surfaceVelocity * Mathf.Abs(tangent.x);
+        bool hasMovementInput = Mathf.Abs(horizontalInput) > MinimumGroundMovementVelocity;
 
-        float slopeVerticalVelocity =
-            horizontalVelocity * tangent.y / tangentHorizontal;
+        rb.linearVelocity = new Vector2(
+            horizontalVelocity,
+            GetGroundMovementVerticalVelocity(
+                horizontalVelocity,
+                tangent,
+                hasMovementInput));
+    }
 
-        if (slopeVerticalVelocity < 0f)
+    private float GetGroundMovementVerticalVelocity(
+        float horizontalVelocity,
+        Vector2 tangent,
+        bool hasMovementInput)
+    {
+        float verticalVelocity =
+            horizontalVelocity * tangent.y /
+            Mathf.Max(Mathf.Abs(tangent.x), MinimumTangentHorizontal);
+
+        bool isNearlyFlat = Mathf.Abs(tangent.y) <= MinimumGroundMovementVelocity;
+        if (verticalVelocity <= 0f && (hasMovementInput || isNearlyFlat))
         {
-            slopeVerticalVelocity -= slopeStickSpeed;
+            float maximumSnapSpeed = Mathf.Min(
+                Mathf.Max(0f, maximumGroundSnapSpeed),
+                Mathf.Max(0f, slopeStickSpeed));
+            verticalVelocity -= Mathf.Min(
+                GetGroundSnapSpeed(),
+                maximumSnapSpeed);
         }
 
-        slopeVerticalVelocity -= GetGroundSnapSpeed();
-        rb.linearVelocity = new Vector2(horizontalVelocity, slopeVerticalVelocity);
+        return verticalVelocity;
     }
 
     private float GetGroundMoveSpeed()
@@ -828,13 +845,16 @@ public class Player : MonoBehaviour
     {
         if (anim != null && rb != null && hasLocomotionSpeedAnimatorParameter)
         {
-            float normalizedHorizontalSpeed = Mathf.Clamp01(
-                Mathf.Abs(rb.linearVelocity.x) /
+            float movementSpeed = HasGroundContact
+                ? Mathf.Abs(Vector2.Dot(rb.linearVelocity, CurrentGroundInfo.Tangent))
+                : Mathf.Abs(rb.linearVelocity.x);
+            float normalizedMovementSpeed = Mathf.Clamp01(
+                movementSpeed /
                 Mathf.Max(moveSpeed, MinimumLocomotionSpeedDenominator));
 
             anim.SetFloat(
                 locomotionSpeedAnimatorParameterHash,
-                normalizedHorizontalSpeed,
+                normalizedMovementSpeed,
                 Mathf.Max(locomotionAnimationDampTime, MinimumLocomotionAnimationDampTime),
                 Time.deltaTime);
         }
@@ -1008,17 +1028,11 @@ public class Player : MonoBehaviour
                 0f,
                 bounds.min.y - hit.point.y);
 
-        float angle =
-            Vector2.SignedAngle(
-                Vector2.right,
-                tangent);
-
         SetGroundContact(
             normal,
             tangent,
             hit.point,
-            distance,
-            angle);
+            distance);
     }
 
     private bool TrySetGroundContactFromPhysicsContacts()
@@ -1057,17 +1071,11 @@ public class Player : MonoBehaviour
                     normal.y,
                     -normal.x).normalized;
 
-            float angle =
-                Vector2.SignedAngle(
-                    Vector2.right,
-                    tangent);
-
             SetGroundContact(
                 normal,
                 tangent,
                 contact.point,
-                0f,
-                angle);
+                0f);
 
             return true;
         }
@@ -1082,17 +1090,27 @@ public class Player : MonoBehaviour
         Vector2 normal,
         Vector2 tangent,
         Vector2 point,
-        float distance,
-        float angle)
+        float distance)
     {
+        float smoothingFactor = 1f - Mathf.Exp(
+            -Mathf.Max(0f, groundTangentSmoothing) * Time.fixedDeltaTime);
+        Vector2 smoothedTangent = Vector2.Lerp(
+            lastWalkableGroundInfo.Tangent,
+            tangent.normalized,
+            smoothingFactor).normalized;
+
+        float smoothedAngle = Vector2.SignedAngle(
+            Vector2.right,
+            smoothedTangent);
+
         currentGroundInfo =
             new GroundInfo(
                 true,
                 normal,
-                tangent,
+                smoothedTangent,
                 point,
                 distance,
-                angle);
+                smoothedAngle);
 
         lastWalkableGroundInfo =
             currentGroundInfo;
@@ -1136,8 +1154,8 @@ public class Player : MonoBehaviour
             return 0f;
 
         return Mathf.Min(
-            gap / Time.fixedDeltaTime,
-            maximumGroundSnapSpeed);
+            gap * Mathf.Max(0f, groundSnapResponse),
+            Mathf.Max(0f, maximumGroundSnapSpeed));
     }
 
     private float GetGroundCastDistance() =>

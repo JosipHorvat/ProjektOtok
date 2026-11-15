@@ -9,6 +9,9 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
 {
     private const string StandardSlashTrigger = "MeleeSlash";
     private const string MeleeAttackActiveParameter = "MeleeAttackActive";
+    private const string WeaponActionsLayerName = "WeaponActions";
+    private const float KnifeDrawNormalizedTime = 0.20f;
+    private const float KnifeResheathNormalizedTime = 0.90f;
     private const float MinimumAttackRange = 0.05f;
     private const float MinimumAttackCooldown = 0.01f;
     private const float MinimumAttackDuration = 0.1f;
@@ -32,6 +35,8 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     private WeaponFireController weaponFireController;
     private PlayerReloadController reloadController;
     private PlayerMeleeWeaponController meleeWeaponController;
+    private WeaponHoldController weaponHoldController;
+    private HeldWeapon weaponAtAttackStart;
 
     private readonly HashSet<IDamageable2D> damagedTargets = new HashSet<IDamageable2D>();
     private Vector2 attackDirection;
@@ -39,10 +44,16 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     private float activeAttackRange;
     private float activeAttackCooldown;
     private float impactTime;
+    private float knifeDrawTime;
+    private float knifeResheathTime;
     private float attackEndTime;
     private float nextAttackTime;
     private bool isAttackCommitted;
     private bool hasAppliedDamage;
+    private bool hasDrawnKnife;
+    private bool hasResheathedKnife;
+    private int suppressedWeaponActionsLayerIndex = -1;
+    private float weaponActionsLayerWeightBeforeAttack;
     private string activeSlashTrigger = StandardSlashTrigger;
 
     /// <summary>Returns whether a committed melee slash is currently controlling the player.</summary>
@@ -70,6 +81,22 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     {
         if (isAttackCommitted)
         {
+            if (ShouldCancelAttack())
+            {
+                CancelMeleeAttack();
+                return;
+            }
+
+            SuppressWeaponActionsLayer();
+            if (Time.time >= knifeResheathTime)
+            {
+                SheatheMeleeKnife();
+            }
+            else if (Time.time >= knifeDrawTime)
+            {
+                DrawMeleeKnife();
+            }
+
             if (!hasAppliedDamage && Time.time >= impactTime)
             {
                 ApplyMeleeDamage();
@@ -95,6 +122,50 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         }
     }
 
+    private void LateUpdate()
+    {
+        if (isAttackCommitted)
+        {
+            SuppressWeaponActionsLayer();
+        }
+    }
+
+    /// <summary>Draws the hand knife at the authored draw frame; ignored after resheathing or outside an active attack.</summary>
+    public void DrawMeleeKnife()
+    {
+        if (!isAttackCommitted || hasDrawnKnife || hasResheathedKnife || Time.time >= knifeResheathTime)
+        {
+            return;
+        }
+
+        if (ShouldCancelAttack())
+        {
+            CancelMeleeAttack();
+            return;
+        }
+
+        hasDrawnKnife = true;
+        meleeWeaponController?.SetAttackVisualActive(true);
+    }
+
+    /// <summary>Hides the hand knife at the authored resheath frame and prevents later draw events or fallbacks from showing it again.</summary>
+    public void SheatheMeleeKnife()
+    {
+        if (!isAttackCommitted)
+        {
+            return;
+        }
+
+        hasResheathedKnife = true;
+        meleeWeaponController?.SetAttackVisualActive(false);
+    }
+
+    /// <summary>Cancels the committed stab, restores the gun and weapon animation layer, and hides the hand knife without applying pending damage.</summary>
+    public void CancelMeleeAttack()
+    {
+        CompleteAttack();
+    }
+
     /// <summary>Animation event positioned at the stab's impact frame.</summary>
     public void AnimationEvent_ApplyMeleeDamage()
     {
@@ -111,8 +182,10 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     public bool TryBeginAttack(MeleeAttackInputSource inputSource)
     {
         ResolveReferences();
-        if (isAttackCommitted || inputSource == MeleeAttackInputSource.None ||
-            player == null || inputReader == null || meleeWeaponController == null ||
+        if (!isActiveAndEnabled || isAttackCommitted || inputSource == MeleeAttackInputSource.None ||
+            player == null || !player.isActiveAndEnabled || inputReader == null || !inputReader.isActiveAndEnabled ||
+            meleeWeaponController == null || !meleeWeaponController.isActiveAndEnabled ||
+            weaponHoldController != null && !weaponHoldController.isActiveAndEnabled ||
             inputReader.IsMeleeAttackCommitted ||
             (GameManager.Instance != null && GameManager.Instance.IsGameplayInputLocked) ||
             player.IsOnLadder ||
@@ -141,9 +214,14 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
 
         float duration = Mathf.Max(MinimumAttackDuration, committedAttackDuration);
         impactTime = Time.time + duration * Mathf.Clamp01(impactNormalizedTime);
+        knifeDrawTime = Time.time + duration * KnifeDrawNormalizedTime;
+        knifeResheathTime = Time.time + duration * KnifeResheathNormalizedTime;
         attackEndTime = Time.time + duration + AttackTimeoutGrace;
         nextAttackTime = Time.time + activeAttackCooldown;
         hasAppliedDamage = false;
+        hasDrawnKnife = false;
+        hasResheathedKnife = false;
+        weaponAtAttackStart = weaponHoldController != null ? weaponHoldController.CurrentWeapon : null;
         damagedTargets.Clear();
         isAttackCommitted = true;
 
@@ -152,7 +230,9 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             inputReader.SetMeleeAttackCommitted(true);
             inputReader.ConsumeJumpBuffer();
             weaponFireController?.NotifyMeleeAttackStarted();
-            meleeWeaponController.SetAttackVisualActive(true);
+            meleeWeaponController.SetAttackVisualActive(false);
+            weaponHoldController?.SetMeleeMode(true);
+            SuppressWeaponActionsLayer();
 
             if (animator != null)
             {
@@ -186,6 +266,12 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     {
         if (!isAttackCommitted || hasAppliedDamage)
         {
+            return;
+        }
+
+        if (ShouldCancelAttack())
+        {
+            CancelMeleeAttack();
             return;
         }
 
@@ -242,18 +328,70 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         return null;
     }
 
-    private void CompleteAttack()
+    private bool ShouldCancelAttack()
     {
-        if (animator != null)
+        return player == null || !player.isActiveAndEnabled || player.IsOnLadder ||
+            inputReader == null || !inputReader.isActiveAndEnabled || !inputReader.IsMeleeAttackCommitted ||
+            meleeWeaponController == null || !meleeWeaponController.isActiveAndEnabled ||
+            weaponHoldController != null && (!weaponHoldController.isActiveAndEnabled ||
+                weaponHoldController.CurrentWeapon != weaponAtAttackStart) ||
+            reloadController != null && reloadController.IsReloading ||
+            player.stateMachine != null && player.stateMachine.CurrentState == player.quickStepState ||
+            GameManager.Instance != null && GameManager.Instance.IsGameplayInputLocked;
+    }
+
+    private void SuppressWeaponActionsLayer()
+    {
+        if (animator == null)
         {
-            animator.ResetTrigger(activeSlashTrigger);
-            animator.SetBool(MeleeAttackActiveParameter, false);
+            return;
         }
 
-        inputReader?.SetMeleeAttackCommitted(false);
-        meleeWeaponController?.SetAttackVisualActive(false);
+        if (suppressedWeaponActionsLayerIndex < 0)
+        {
+            int layerIndex = animator.GetLayerIndex(WeaponActionsLayerName);
+            if (layerIndex < 0)
+            {
+                return;
+            }
+
+            suppressedWeaponActionsLayerIndex = layerIndex;
+            weaponActionsLayerWeightBeforeAttack = animator.GetLayerWeight(layerIndex);
+        }
+
+        animator.SetLayerWeight(suppressedWeaponActionsLayerIndex, 0f);
+    }
+
+    private void CompleteAttack()
+    {
+        bool wasCommitted = isAttackCommitted;
         isAttackCommitted = false;
+        if (animator != null)
+        {
+            if (wasCommitted)
+            {
+                animator.ResetTrigger(activeSlashTrigger);
+                animator.SetBool(MeleeAttackActiveParameter, false);
+            }
+
+            if (suppressedWeaponActionsLayerIndex >= 0 && suppressedWeaponActionsLayerIndex < animator.layerCount)
+            {
+                animator.SetLayerWeight(suppressedWeaponActionsLayerIndex, weaponActionsLayerWeightBeforeAttack);
+            }
+        }
+
+        suppressedWeaponActionsLayerIndex = -1;
+        if (wasCommitted)
+        {
+            inputReader?.SetMeleeAttackCommitted(false);
+            weaponHoldController?.SetMeleeMode(false);
+        }
+
+        meleeWeaponController?.SetAttackVisualActive(false);
+        weaponAtAttackStart = null;
         hasAppliedDamage = false;
+        hasDrawnKnife = false;
+        hasResheathedKnife = true;
     }
 
     private void ResolveReferences()
@@ -286,6 +424,11 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         if (meleeWeaponController == null)
         {
             meleeWeaponController = GetComponent<PlayerMeleeWeaponController>();
+        }
+
+        if (weaponHoldController == null)
+        {
+            weaponHoldController = GetComponentInChildren<WeaponHoldController>(true);
         }
     }
 }

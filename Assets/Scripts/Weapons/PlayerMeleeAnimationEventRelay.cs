@@ -11,6 +11,20 @@ public sealed class PlayerMeleeAnimationEventRelay : MonoBehaviour
         ResolveAttackController();
     }
 
+    /// <summary>Draws the hand knife at normalized time 0.20 of the stab clip.</summary>
+    public void DrawMeleeKnife()
+    {
+        ResolveAttackController();
+        attackController?.DrawMeleeKnife();
+    }
+
+    /// <summary>Resheathes the knife at normalized time 0.90 of the stab clip.</summary>
+    public void SheatheMeleeKnife()
+    {
+        ResolveAttackController();
+        attackController?.SheatheMeleeKnife();
+    }
+
     /// <summary>Applies the committed melee hit on the authored strike frame.</summary>
     public void AnimationEvent_ApplyMeleeDamage()
     {
