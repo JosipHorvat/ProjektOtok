@@ -27,6 +27,14 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     private PlayerMeleeAttackController attackController;
     private Transform playerAnimatorTransform;
     private bool attackVisualActive;
+    private bool readyVisualActive;
+
+    /// <summary>Shows the knife guard independently of commitment; an active Q stab retains its original draw schedule.</summary>
+    public void SetReadyVisualActive(bool active)
+    {
+        readyVisualActive = active;
+        RefreshVisuals();
+    }
 
     /// <summary>Gets the currently carried Combat Knife definition, or null when the strong knife is stored or absent.</summary>
     public MeleeWeaponDefinition CarriedCombatKnifeDefinition => FindCarriedCombatKnifeDefinition();
@@ -64,6 +72,7 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
         }
 
         attackController?.CancelMeleeAttack();
+        readyVisualActive = false;
         attackVisualActive = false;
         RefreshVisuals();
     }
@@ -175,8 +184,9 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     private void RefreshVisuals()
     {
         ResolveReferences();
-        bool isKnifeDrawn = isActiveAndEnabled && attackVisualActive &&
-            attackController != null && attackController.IsAttackCommitted;
+        bool committed = attackController != null && attackController.IsAttackCommitted;
+        bool isKnifeDrawn = isActiveAndEnabled &&
+            (committed ? attackVisualActive : readyVisualActive);
         VisualMode = isKnifeDrawn ? MeleeVisualMode.Drawn : MeleeVisualMode.Sheathed;
         if (offhandKnifeRenderer != null)
         {

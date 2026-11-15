@@ -156,6 +156,18 @@ public sealed class WeaponHoldController : MonoBehaviour
 
     private bool isLadderMode;
     private bool isMeleeMode;
+    private bool isKnifeAimMode;
+
+    /// <summary>Releases firearm IK while the unarmed knife guard owns the authored upper-body pose.</summary>
+    public void SetKnifeAimMode(bool active)
+    {
+        isKnifeAimMode = active;
+        if (active && currentWeapon == null)
+        {
+            ResetAimForStow();
+            SetArmWeights(0f, 0f, true);
+        }
+    }
     private HeldWeapon stowedWeapon;
     private Transform weaponParentBeforeStow;
     private Vector3 weaponPositionBeforeStow;
@@ -295,6 +307,7 @@ public sealed class WeaponHoldController : MonoBehaviour
     {
         meleeAttackController?.CancelMeleeAttack();
         isMeleeMode = false;
+        isKnifeAimMode = false;
         isLadderMode = false;
         UpdateWeaponStow();
         SetArmWeights(0f, 0f, true);
@@ -398,6 +411,12 @@ public sealed class WeaponHoldController : MonoBehaviour
         if (isMeleeMode || inputReader != null && inputReader.IsMeleeAttackCommitted)
         {
             SetMeleeMode(true);
+            return;
+        }
+
+        if (isKnifeAimMode && currentWeapon == null)
+        {
+            SetArmWeights(0f, 0f, true);
             return;
         }
 
@@ -1009,44 +1028,8 @@ public sealed class WeaponHoldController : MonoBehaviour
             return false;
         }
 
-        Vector2 aimInput = inputReader.AimInput;
-        Vector3 resolvedDirection;
-        if (inputReader.AimUsesGamepad)
-        {
-            if (aimInput.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
-            {
-                return false;
-            }
-
-            Vector3 cameraRight = aimCamera != null ? aimCamera.transform.right : Vector3.right;
-            Vector3 cameraUp = aimCamera != null ? aimCamera.transform.up : Vector3.up;
-            resolvedDirection = cameraRight * aimInput.x + cameraUp * aimInput.y;
-        }
-        else
-        {
-            if (aimCamera == null)
-            {
-                return false;
-            }
-
-            float cameraDepth = Vector3.Dot(worldOrigin - aimCamera.transform.position, aimCamera.transform.forward);
-            if (cameraDepth <= 0f)
-            {
-                return false;
-            }
-
-            Vector3 mouseWorldPosition = aimCamera.ScreenToWorldPoint(new Vector3(aimInput.x, aimInput.y, cameraDepth));
-            resolvedDirection = mouseWorldPosition - worldOrigin;
-            resolvedDirection.z = 0f;
-        }
-
-        Vector2 planarDirection = new Vector2(resolvedDirection.x, resolvedDirection.y);
-        if (planarDirection.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
-        {
-            return false;
-        }
-
-        worldDirection = planarDirection.normalized;
+        if (!TryGetWorldAimDirection(worldOrigin, out Vector3 resolvedDirection)) return false;
+        worldDirection = ((Vector2)resolvedDirection).normalized;
         if (player != null && Mathf.Abs(worldDirection.x) > AimFacingDeadZone)
         {
             player.SetFacingDirection(worldDirection.x > 0f ? 1 : -1);
@@ -1055,9 +1038,37 @@ public sealed class WeaponHoldController : MonoBehaviour
         return true;
     }
 
+    /// <summary>Converts the current mouse/stick input to a finite normalized world direction without requiring a gun; falls back to facing inside the dead zone.</summary>
+    public Vector2 GetCombatAimDirection(Vector3 worldOrigin)
+    {
+        if (TryGetWorldAimDirection(worldOrigin, out Vector3 direction))
+        {
+            return ((Vector2)direction).normalized;
+        }
+
+        return new Vector2(player != null ? player.facingDir : 1, 0f);
+    }
+
     private bool TryGetAimDirection(out Vector2 localAimDirection, out Vector3 worldAimDirection)
     {
         localAimDirection = Vector2.zero;
+        if (!TryGetWorldAimDirection(weaponAimPivot.position, out worldAimDirection))
+        {
+            return false;
+        }
+
+        if (player != null && Mathf.Abs(worldAimDirection.x) > AimFacingDeadZone)
+        {
+            player.SetFacingDirection(worldAimDirection.x > 0f ? 1 : -1);
+        }
+
+        Transform pivotParent = weaponAimPivot.parent != null ? weaponAimPivot.parent : transform;
+        localAimDirection = pivotParent.InverseTransformDirection(worldAimDirection);
+        return localAimDirection.sqrMagnitude >= MinimumAimDirectionSqrMagnitude;
+    }
+
+    private bool TryGetWorldAimDirection(Vector3 worldOrigin, out Vector3 worldAimDirection)
+    {
         worldAimDirection = Vector3.zero;
         if (inputReader == null)
         {
@@ -1084,7 +1095,7 @@ public sealed class WeaponHoldController : MonoBehaviour
             }
 
             float cameraDepth = Vector3.Dot(
-                weaponAimPivot.position - aimCamera.transform.position,
+                worldOrigin - aimCamera.transform.position,
                 aimCamera.transform.forward);
             if (cameraDepth <= 0f)
             {
@@ -1092,23 +1103,14 @@ public sealed class WeaponHoldController : MonoBehaviour
             }
 
             Vector3 mouseWorldPosition = aimCamera.ScreenToWorldPoint(new Vector3(aimInput.x, aimInput.y, cameraDepth));
-            worldAimDirection = mouseWorldPosition - weaponAimPivot.position;
+            worldAimDirection = mouseWorldPosition - worldOrigin;
             worldAimDirection.z = 0f;
         }
 
-        if (worldAimDirection.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
-        {
-            return false;
-        }
-
-        if (player != null && Mathf.Abs(worldAimDirection.x) > AimFacingDeadZone)
-        {
-            player.SetFacingDirection(worldAimDirection.x > 0f ? 1 : -1);
-        }
-
-        Transform pivotParent = weaponAimPivot.parent != null ? weaponAimPivot.parent : transform;
-        localAimDirection = pivotParent.InverseTransformDirection(worldAimDirection);
-        return localAimDirection.sqrMagnitude >= MinimumAimDirectionSqrMagnitude;
+        worldAimDirection.z = 0f;
+        return !float.IsNaN(worldAimDirection.x) && !float.IsNaN(worldAimDirection.y) &&
+            !float.IsInfinity(worldAimDirection.x) && !float.IsInfinity(worldAimDirection.y) &&
+            worldAimDirection.sqrMagnitude >= MinimumAimDirectionSqrMagnitude;
     }
 
     private void UpdateRangedWeaponAnimatorParameter()

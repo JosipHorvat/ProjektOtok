@@ -1790,6 +1790,7 @@ GameObject:
   - component: {fileID: 930068579}
   - component: {fileID: 930068580}
   - component: {fileID: 930068581}
+  - component: {fileID: 930068582}
   m_Layer: 9
   m_Name: Player
   m_TagString: Untagged
@@ -2185,8 +2186,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6c9667b44a555bc47ab8a911d40a17e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMeleeAttackController
+  aimedSlashDuration: 0.6
+  aimedSlashImpactTime: 0.29
+  aimedSlashFinishTime: 0.58
+  aimedSlashSweepAngle: 100
+  aimedSlashSweepWidth: 0.35
   committedAttackDuration: 0.6
   impactNormalizedTime: 0.48
+--- !u!114 &930068582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 930068568}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64056c7b1b7f6844cad37037d190d131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerKnifeAimController
+  chest: {fileID: 5283110697418119746}
+  maximumAimAngle: 85
+  aimBlendSpeed: 540
 --- !u!1 &931254159
 GameObject:
   m_ObjectHideFlags: 0

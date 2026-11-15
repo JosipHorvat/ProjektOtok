@@ -8,6 +8,28 @@ using UnityEngine;
 public sealed class PlayerMeleeAttackController : MonoBehaviour
 {
     private const string StandardSlashTrigger = "MeleeSlash";
+    private const string AimedSlashTrigger = "KnifeAimSlash";
+    private const float DefaultSlashImpactTime = 0.29f;
+    private const float DefaultSlashFinishTime = 0.58f;
+    private const float DefaultSweepAngle = 100f;
+    private const float DefaultSweepWidth = 0.35f;
+    private const int SweepSampleCount = 9;
+
+    [Header("Aimed knife slash")]
+    [Tooltip("Duration of the aimed slash clip in seconds.")]
+    [SerializeField, Min(MinimumAttackDuration)] private float aimedSlashDuration = DefaultAttackDuration;
+    [Tooltip("Damage fallback time in seconds; match the authored damage event.")]
+    [SerializeField, Min(0f)] private float aimedSlashImpactTime = DefaultSlashImpactTime;
+    [Tooltip("Commitment ends at this recovery time; match the finish event.")]
+    [SerializeField, Min(0f)] private float aimedSlashFinishTime = DefaultSlashFinishTime;
+    [Tooltip("Angular span of the cutting arc centered on the captured direction.")]
+    [SerializeField, Range(1f, 180f)] private float aimedSlashSweepAngle = DefaultSweepAngle;
+    [Tooltip("Thickness of the swept blade volume in world units; reach comes from melee stats.")]
+    [SerializeField, Min(0.01f)] private float aimedSlashSweepWidth = DefaultSweepWidth;
+    private bool isAimedSlash;
+
+    /// <summary>True only during a committed directional aimed slash, not a Q stab.</summary>
+    public bool IsAimedSlashCommitted => isAttackCommitted && isAimedSlash;
     private const string MeleeAttackActiveParameter = "MeleeAttackActive";
     private const string WeaponActionsLayerName = "WeaponActions";
     private const float KnifeDrawNormalizedTime = 0.20f;
@@ -151,7 +173,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     /// <summary>Hides the hand knife at the authored resheath frame and prevents later draw events or fallbacks from showing it again.</summary>
     public void SheatheMeleeKnife()
     {
-        if (!isAttackCommitted)
+        if (!isAttackCommitted || isAimedSlash)
         {
             return;
         }
@@ -169,20 +191,39 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     /// <summary>Animation event positioned at the stab's impact frame.</summary>
     public void AnimationEvent_ApplyMeleeDamage()
     {
+        if (isAimedSlash && Time.time < impactTime) return;
         ApplyMeleeDamage();
     }
 
     /// <summary>Animation event called after the committed recovery portion of the stab.</summary>
     public void AnimationEvent_MeleeAttackFinished()
     {
+        if (isAimedSlash && Time.time < attackEndTime) return;
         CompleteAttack();
     }
 
     /// <summary>Begins a facing-direction stab from Q or the existing gamepad melee button.</summary>
     public bool TryBeginAttack(MeleeAttackInputSource inputSource)
     {
+        if (inputSource == MeleeAttackInputSource.None) return false;
+        return TryBeginAttackInternal(false, Vector2.zero);
+    }
+
+    /// <summary>Commits a no-gun sweeping slash using a world direction captured before combat input is masked.</summary>
+    public bool TryBeginAimedSlash(Vector2 direction)
+    {
+        if (float.IsNaN(direction.x) || float.IsNaN(direction.y) ||
+            float.IsInfinity(direction.x) || float.IsInfinity(direction.y) ||
+            direction.sqrMagnitude < MinimumFacingDirectionMagnitude) return false;
+        return TryBeginAttackInternal(true, direction.normalized);
+    }
+
+    private bool TryBeginAttackInternal(bool aimedSlash, Vector2 direction)
+    {
         ResolveReferences();
-        if (!isActiveAndEnabled || isAttackCommitted || inputSource == MeleeAttackInputSource.None ||
+        if (aimedSlash && (weaponHoldController == null || weaponHoldController.CurrentWeapon != null ||
+            inputReader == null || !inputReader.FocusAimHeld)) return false;
+        if (!isActiveAndEnabled || isAttackCommitted ||
             player == null || !player.isActiveAndEnabled || inputReader == null || !inputReader.isActiveAndEnabled ||
             meleeWeaponController == null || !meleeWeaponController.isActiveAndEnabled ||
             weaponHoldController != null && !weaponHoldController.isActiveAndEnabled ||
@@ -206,17 +247,19 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             activeSlashTrigger = activeDefinition.AttackAnimationTrigger;
         }
 
-        attackDirection = new Vector2(player.facingDir, 0f);
+        isAimedSlash = aimedSlash;
+        if (aimedSlash) activeSlashTrigger = AimedSlashTrigger;
+        attackDirection = aimedSlash ? direction : new Vector2(player.facingDir, 0f);
         if (Mathf.Abs(attackDirection.x) > MinimumFacingDirectionMagnitude)
         {
             player.SetFacingDirection(attackDirection.x > 0f ? 1 : -1);
         }
 
-        float duration = Mathf.Max(MinimumAttackDuration, committedAttackDuration);
-        impactTime = Time.time + duration * Mathf.Clamp01(impactNormalizedTime);
-        knifeDrawTime = Time.time + duration * KnifeDrawNormalizedTime;
-        knifeResheathTime = Time.time + duration * KnifeResheathNormalizedTime;
-        attackEndTime = Time.time + duration + AttackTimeoutGrace;
+        float duration = Mathf.Max(MinimumAttackDuration, aimedSlash ? aimedSlashDuration : committedAttackDuration);
+        impactTime = Time.time + (aimedSlash ? Mathf.Clamp(aimedSlashImpactTime, 0f, duration) : duration * Mathf.Clamp01(impactNormalizedTime));
+        knifeDrawTime = aimedSlash ? Time.time : Time.time + duration * KnifeDrawNormalizedTime;
+        knifeResheathTime = aimedSlash ? float.PositiveInfinity : Time.time + duration * KnifeResheathNormalizedTime;
+        attackEndTime = Time.time + (aimedSlash ? Mathf.Clamp(aimedSlashFinishTime, aimedSlashImpactTime, duration) : duration + AttackTimeoutGrace);
         nextAttackTime = Time.time + activeAttackCooldown;
         hasAppliedDamage = false;
         hasDrawnKnife = false;
@@ -230,7 +273,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             inputReader.SetMeleeAttackCommitted(true);
             inputReader.ConsumeJumpBuffer();
             weaponFireController?.NotifyMeleeAttackStarted();
-            meleeWeaponController.SetAttackVisualActive(false);
+            meleeWeaponController.SetAttackVisualActive(aimedSlash);
             weaponHoldController?.SetMeleeMode(true);
             SuppressWeaponActionsLayer();
 
@@ -259,7 +302,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         }
 
         AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
-        return stateInfo.IsName("Base Layer.MeleeSlash") && stateInfo.normalizedTime >= 1f;
+        return stateInfo.IsName(isAimedSlash ? "Base Layer.KnifeAimSlash" : "Base Layer.MeleeSlash") && stateInfo.normalizedTime >= 1f;
     }
 
     private void ApplyMeleeDamage()
@@ -277,6 +320,21 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
 
         hasAppliedDamage = true;
         Vector2 attackOrigin = GetAttackOrigin();
+        if (isAimedSlash)
+        {
+            // Integrate the authored cutting arc at impact, not a horizontal thrust box.
+            float centerAngle = Mathf.Atan2(attackDirection.y, attackDirection.x) * Mathf.Rad2Deg;
+            for (int sample = 0; sample < SweepSampleCount; sample++)
+            {
+                float angle = centerAngle + Mathf.Lerp(-aimedSlashSweepAngle * 0.5f,
+                    aimedSlashSweepAngle * 0.5f, sample / (float)(SweepSampleCount - 1));
+                Vector2 radial = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
+                Vector2 center = attackOrigin + radial * (activeAttackRange * 0.5f);
+                ApplyDamageToColliders(Physics2D.OverlapBoxAll(center,
+                    new Vector2(activeAttackRange, aimedSlashSweepWidth), angle), center);
+            }
+            return;
+        }
         Vector2 boxSize = new Vector2(
             activeAttackRange,
             Mathf.Max(MinimumHitboxHeight, activeAttackRange * AttackHeightScale));
@@ -284,6 +342,11 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         float boxAngle = Mathf.Atan2(attackDirection.y, attackDirection.x) * Mathf.Rad2Deg;
         Collider2D[] hitColliders = Physics2D.OverlapBoxAll(boxCenter, boxSize, boxAngle);
 
+        ApplyDamageToColliders(hitColliders, boxCenter);
+    }
+
+    private void ApplyDamageToColliders(Collider2D[] hitColliders, Vector2 boxCenter)
+    {
         for (int colliderIndex = 0; colliderIndex < hitColliders.Length; colliderIndex++)
         {
             Collider2D hitCollider = hitColliders[colliderIndex];
