@@ -1,6 +1,7 @@
 using UnityEngine;
 
 /// <summary>Tilts the player's visual hierarchy for slopes and adds a subtle speed-scaled forward lean.</summary>
+[DefaultExecutionOrder(-25)]
 public sealed class PlayerSlopeVisuals : MonoBehaviour
 {
     [SerializeField] private float maximumVisualTilt = 12f;
@@ -13,14 +14,21 @@ public sealed class PlayerSlopeVisuals : MonoBehaviour
     private const float MinimumSpeedDenominator = 0.01f;
 
     private Player player;
-    private Quaternion baseLocalRotation;
+    private Quaternion authoredLocalRotation;
+    private Quaternion appliedLocalRotation;
+    private bool hasAppliedTilt;
     private float currentTilt;
     private float tiltVelocity;
 
     private void Awake()
     {
         player = GetComponentInParent<Player>();
-        baseLocalRotation = transform.localRotation;
+    }
+
+    private void Update()
+    {
+        // Remove only our previous contribution before the normal-mode Animator evaluates.
+        RestoreAuthoredRotation();
     }
 
     private void LateUpdate()
@@ -49,12 +57,28 @@ public sealed class PlayerSlopeVisuals : MonoBehaviour
         targetTilt -= speedWeightedLean * player.facingDir;
 
         currentTilt = Mathf.SmoothDampAngle(currentTilt, targetTilt, ref tiltVelocity, tiltSmoothTime);
-        transform.localRotation = baseLocalRotation * Quaternion.Euler(0f, 0f, currentTilt);
+        // Animator has evaluated; tilt before weapon targets (-20), foot placement (-15),
+        // knife aim (-15), and IKManager2D (-10), so no solved foot is shifted afterward.
+        authoredLocalRotation = transform.localRotation;
+        appliedLocalRotation = authoredLocalRotation * Quaternion.Euler(0f, 0f, currentTilt);
+        transform.localRotation = appliedLocalRotation;
+        hasAppliedTilt = true;
+    }
+
+    private void RestoreAuthoredRotation()
+    {
+        // Preserve an Animator or another owner's replacement rather than restoring a stale base.
+        if (hasAppliedTilt && transform.localRotation == appliedLocalRotation)
+        {
+            transform.localRotation = authoredLocalRotation;
+        }
+
+        hasAppliedTilt = false;
     }
 
     private void OnDisable()
     {
-        transform.localRotation = baseLocalRotation;
+        RestoreAuthoredRotation();
         currentTilt = 0f;
         tiltVelocity = 0f;
     }

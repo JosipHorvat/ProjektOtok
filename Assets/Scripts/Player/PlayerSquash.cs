@@ -28,7 +28,9 @@ public sealed class PlayerSquash : MonoBehaviour
     [Header("Landing Impact")]
     [SerializeField, Min(0f)] private float landingSquashY = 0.28f;
     [SerializeField, Min(0f)] private float landingWidenX = 0.2f;
+    [Tooltip("Controls how quickly squash strength ramps up above the light-impact threshold; it no longer imposes a minimum bounce on tiny impacts.")]
     [SerializeField, Range(0f, 1f)] private float minimumLandingIntensity = 0.5f;
+    [Tooltip("Impacts at or below this speed do not start a landing bounce; stronger impacts ramp up to the full expression.")]
     [SerializeField, Min(0f)] private float lightImpactSpeed = 3f;
     [SerializeField, Min(0.01f)] private float heavyImpactSpeed = 16f;
     [SerializeField, Min(0.01f)] private float landingDuration = 0.42f;
@@ -68,10 +70,20 @@ public sealed class PlayerSquash : MonoBehaviour
     {
         float maximumImpact = Mathf.Max(heavyImpactSpeed, lightImpactSpeed + 0.01f);
         float impact = Mathf.InverseLerp(lightImpactSpeed, maximumImpact, impactSpeed);
-        landingIntensity = Mathf.Lerp(minimumLandingIntensity, 1f, impact);
         isAirborne = false;
-        isLanding = true;
         landingElapsed = 0f;
+
+        if (impact <= 0f)
+        {
+            // Ground-state transitions can follow a soft contact; do not magnify it into a full-strength bounce.
+            isLanding = false;
+            ApplyScale(Vector2.one);
+            return;
+        }
+
+        // Start at zero response at the threshold, then ease into the authored minimum and full-impact expression.
+        landingIntensity = impact * Mathf.Lerp(minimumLandingIntensity, 1f, impact);
+        isLanding = true;
         ApplyLandingFrame();
     }
 

@@ -43,14 +43,6 @@ public sealed class PlayerJumpState : PlayerState
         {
             CutJumpShort();
         }
-
-        // Keep JumpState responsible for the landing while ground contact is
-        // already confirmed. This avoids an unnecessary AirState transition.
-        if (rb.linearVelocity.y <= 0f &&
-            !player.HasGroundContact)
-        {
-            stateMachine.ChangeState(player.airState);
-        }
     }
 
     public override void FixedUpdate()
@@ -73,6 +65,13 @@ public sealed class PlayerJumpState : PlayerState
         {
             Land();
             return;
+        }
+
+        // Decide the falling transition only after Player refreshed support for
+        // this physics step, not from a potentially stale render-frame sample.
+        if (rb.linearVelocity.y <= 0f && !player.HasGroundContact)
+        {
+            stateMachine.ChangeState(player.airState);
         }
 
         player.ApplyAirMovement(xInput);

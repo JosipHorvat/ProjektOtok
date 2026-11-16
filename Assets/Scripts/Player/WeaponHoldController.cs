@@ -1076,7 +1076,7 @@ public sealed class WeaponHoldController : MonoBehaviour
         }
 
         Vector2 aimInput = inputReader.AimInput;
-        if (inputReader.FocusAimUsesGamepad)
+        if (inputReader.AimUsesGamepad)
         {
             if (aimInput.sqrMagnitude < MinimumAimDirectionSqrMagnitude)
             {

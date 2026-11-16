@@ -4,8 +4,9 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class AimReticle2D : MonoBehaviour
 {
-    private const float GamepadAimDistance = 12f;
+    private const float GamepadAimScreenMargin = 0.82f;
     private const float MinimumAimInputSqrMagnitude = 0.04f;
+    private const float MinimumDirectionSqrMagnitude = 0.0001f;
     private const float MinimumConeDistance = 0.01f;
     private const float MaximumDisplayedSpreadDegrees = 80f;
 
@@ -40,6 +41,7 @@ public sealed class AimReticle2D : MonoBehaviour
     private int spreadConeSortingOrder = 20;
 
     private Vector3 baseLocalScale;
+    private Vector2 lastGamepadAimDirection = Vector2.right;
     private LineRenderer spreadConeRenderer;
     private Material spreadConeMaterial;
 
@@ -87,8 +89,13 @@ public sealed class AimReticle2D : MonoBehaviour
             if (aimInput.sqrMagnitude >= MinimumAimInputSqrMagnitude)
             {
                 Vector3 worldDirection = aimCamera.transform.right * aimInput.x + aimCamera.transform.up * aimInput.y;
-                worldAimPoint = origin.position + worldDirection.normalized * GamepadAimDistance;
+                if (worldDirection.sqrMagnitude >= MinimumDirectionSqrMagnitude)
+                {
+                    lastGamepadAimDirection = new Vector2(worldDirection.x, worldDirection.y).normalized;
+                }
             }
+
+            worldAimPoint = origin.position + (Vector3)(lastGamepadAimDirection * GetGamepadAimDistance(lastGamepadAimDirection));
         }
         else
         {
@@ -121,6 +128,37 @@ public sealed class AimReticle2D : MonoBehaviour
         transform.localScale = baseLocalScale * scaleMultiplier;
         UpdateSpreadCone(worldAimPoint, isAiming);
     }
+
+    private float GetGamepadAimDistance(Vector2 worldDirection)
+    {
+        Vector3 directionInCameraSpace = aimCamera.transform.InverseTransformDirection(
+            new Vector3(worldDirection.x, worldDirection.y, 0f));
+        Transform origin = followOrigin != null ? followOrigin : transform;
+        float depth = Vector3.Dot(
+            origin.position - aimCamera.transform.position,
+            aimCamera.transform.forward);
+        float halfHeight = aimCamera.orthographic
+            ? aimCamera.orthographicSize
+            : Mathf.Max(0.01f, depth) * Mathf.Tan(aimCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float halfWidth = halfHeight * aimCamera.aspect;
+        float distanceToEdge = float.PositiveInfinity;
+
+        if (Mathf.Abs(directionInCameraSpace.x) > MinimumDirectionSqrMagnitude)
+        {
+            distanceToEdge = Mathf.Min(distanceToEdge, halfWidth / Mathf.Abs(directionInCameraSpace.x));
+        }
+
+        if (Mathf.Abs(directionInCameraSpace.y) > MinimumDirectionSqrMagnitude)
+        {
+            distanceToEdge = Mathf.Min(distanceToEdge, halfHeight / Mathf.Abs(directionInCameraSpace.y));
+        }
+
+        return float.IsInfinity(distanceToEdge)
+            ? 1f
+            : Mathf.Max(0.1f, distanceToEdge * GamepadAimScreenMargin);
+    }
+
+
 
     private void CreateSpreadConeRenderer()
     {

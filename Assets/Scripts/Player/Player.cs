@@ -24,6 +24,13 @@ public class Player : MonoBehaviour
     private const string QuickStepAnimatorTrigger = "QuickStep";
     private const string LocomotionSpeed = "LocomotionSpeed";
     private const string RunSpeedAnimatorParameter = "RunSpeed";
+    private const string WalkPlaybackSpeedAnimatorParameter = "WalkPlaybackSpeed";
+    private const float GroundProbeMinimumSize = 0.01f;
+    private const float GroundProbeLift = 0.02f;
+    private const float SupportContinuityTolerance = 0.04f;
+    private const float MaximumGroundingDownwardSpeed = 0.1f;
+    private const int GroundContactLossGraceSteps = 1;
+    private const int GroundProbeCapacity = 16;
 
     #endregion
 
@@ -56,6 +63,12 @@ public class Player : MonoBehaviour
     public float airDeceleration = 30f;
     [SerializeField, Min(0f)] private float groundDeceleration = 30f;
 
+    [Header("Ground Walking Response")]
+    [Tooltip("Walking acceleration along the support tangent in units per second squared. Run retains smoothMovement response.")]
+    [SerializeField, Min(0f)] private float groundAcceleration = 65f;
+    [Tooltip("Walking acceleration while reversing direction, in units per second squared.")]
+    [SerializeField, Min(0f)] private float groundReversalAcceleration = 85f;
+
     [Header("Quick Step and Run")]
     [SerializeField, Min(0f)] private float quickStepDistance = 1.7f;
     [SerializeField, Min(MinimumQuickStepTravelDuration)] private float quickStepTravelDuration = 0.18f;
@@ -84,8 +97,11 @@ public class Player : MonoBehaviour
     [SerializeField]
     private float maximumGroundSnapSpeed = 25f;
 
-    [SerializeField, Min(0f)]
-    private float groundTangentSmoothing = 15f;
+    [Header("Ground Adhesion")]
+    [Tooltip("Maximum extra downward probe reach while continuously supported. Never used to acquire a landing from the air.")]
+    [SerializeField, Min(0f)] private float maximumGroundAdhesionDistance = 0.18f;
+    [Tooltip("Physics steps of slope travel included in the support probe. Forward support must confirm a continuous surface.")]
+    [SerializeField, Range(0f, 2f)] private float groundProbePredictionSteps = 1.5f;
 
     [Tooltip("Proportional response used to correct small gaps to walkable ground.")]
     [SerializeField, Min(0f)]
@@ -118,7 +134,8 @@ public class Player : MonoBehaviour
     [Min(0f)]
     public float jumpApexHangTime = 0.03f;
 
-    public float groundingForce = -1.5f;
+    [Tooltip("Small downward velocity used to keep confirmed ground contact stable. Values are clamped to a safe near-zero range.")]
+    public float groundingForce = 0f;
     public float coyoteTime = 0.15f;
     public float jumpBufferTime = 0.15f;
 
@@ -155,6 +172,11 @@ public class Player : MonoBehaviour
     private readonly ContactPoint2D[] groundContacts = new ContactPoint2D[16];
 
     private GroundInfo currentGroundInfo;
+    private int groundContactLossSteps;
+    private readonly RaycastHit2D[] groundProbeHits = new RaycastHit2D[GroundProbeCapacity];
+    private Vector2 previousMotorTangent = Vector2.right;
+    private bool hasGroundMotorVelocity;
+    private bool hasWalkPlaybackSpeedAnimatorParameter;
 
     private GroundInfo lastWalkableGroundInfo = new GroundInfo(
         false,
@@ -218,12 +240,11 @@ public class Player : MonoBehaviour
         !InputReader.FocusAimHeld &&
         MoveInput.x * facingDir > MinimumInput;
 
-    public GroundInfo CurrentGroundInfo =>
-        currentGroundInfo.HasGround
-            ? currentGroundInfo
-            : lastWalkableGroundInfo;
+    /// <summary>Latest support geometry, or neutral geometry when no walkable support exists.</summary>
+    public GroundInfo CurrentGroundInfo => currentGroundInfo;
 
     public bool HasGroundContact => currentGroundInfo.HasGround;
+    public bool IsGroundContactLossConfirmed => groundContactLossSteps > GroundContactLossGraceSteps;
     public bool IsOnLadder => stateMachine != null && stateMachine.CurrentState == ladderState;
     public bool CanGrabAvailableLadder =>
         availableLadder != null &&
@@ -545,7 +566,7 @@ public class Player : MonoBehaviour
     /// <summary>Stops vertical jump or fall motion when a landing is confirmed.</summary>
     public void StopAtGround()
     {
-        SetVerticalVelocity(groundingForce);
+        SetVerticalVelocity(GetControlledGroundingVelocity());
     }
 
     /// <summary>Moves along walkable ground while preserving input release deceleration.</summary>
@@ -559,23 +580,29 @@ public class Player : MonoBehaviour
         }
 
         Vector2 tangent = CurrentGroundInfo.Tangent;
-        float tangentHorizontal = Mathf.Max(
-            Mathf.Abs(tangent.x),
-            MinimumTangentHorizontal);
         bool hasMovementInput = Mathf.Abs(horizontalInput) > MinimumInput;
         float currentMoveSpeed = GetGroundMoveSpeed();
         float targetSurfaceVelocity = hasMovementInput
             ? horizontalInput * currentMoveSpeed
             : 0f;
-        float currentSurfaceVelocity = rb.linearVelocity.x / tangentHorizontal;
-        float movementRate = hasMovementInput
-            ? smoothMovement * currentMoveSpeed
-            : Mathf.Max(0f, groundDeceleration);
+        // Recover controlled speed using the tangent that produced the last velocity.
+        // Re-dividing by the new slope would inject speed on every slope transition.
+        Vector2 velocityTangent = hasGroundMotorVelocity ? previousMotorTangent : tangent;
+        float currentSurfaceVelocity = rb.linearVelocity.x /
+            Mathf.Max(velocityTangent.x, MinimumTangentHorizontal);
+        bool isReversing = currentSurfaceVelocity * targetSurfaceVelocity < 0f;
+        float movementRate = !hasMovementInput
+            ? groundDeceleration
+            : IsForwardRunRequested
+                ? smoothMovement * currentMoveSpeed
+                : isReversing ? groundReversalAcceleration : groundAcceleration;
         float surfaceVelocity = Mathf.MoveTowards(
             currentSurfaceVelocity,
             targetSurfaceVelocity,
             Mathf.Max(0f, movementRate) * Time.fixedDeltaTime);
-        float horizontalVelocity = surfaceVelocity * Mathf.Abs(tangent.x);
+        float horizontalVelocity = surfaceVelocity * tangent.x;
+        previousMotorTangent = tangent;
+        hasGroundMotorVelocity = true;
 
         rb.linearVelocity = new Vector2(
             horizontalVelocity,
@@ -608,6 +635,8 @@ public class Player : MonoBehaviour
             targetSurfaceVelocity,
             Mathf.Max(0f, movementRate) * Time.fixedDeltaTime);
         float horizontalVelocity = surfaceVelocity * Mathf.Abs(tangent.x);
+        previousMotorTangent = tangent;
+        hasGroundMotorVelocity = true;
         bool hasMovementInput = Mathf.Abs(horizontalInput) > MinimumGroundMovementVelocity;
 
         rb.linearVelocity = new Vector2(
@@ -627,18 +656,13 @@ public class Player : MonoBehaviour
             horizontalVelocity * tangent.y /
             Mathf.Max(Mathf.Abs(tangent.x), MinimumTangentHorizontal);
 
-        bool isNearlyFlat = Mathf.Abs(tangent.y) <= MinimumGroundMovementVelocity;
-        if (verticalVelocity <= 0f && (hasMovementInput || isNearlyFlat))
-        {
-            float maximumSnapSpeed = Mathf.Min(
-                Mathf.Max(0f, maximumGroundSnapSpeed),
-                Mathf.Max(0f, slopeStickSpeed));
-            verticalVelocity -= Mathf.Min(
-                GetGroundSnapSpeed(),
-                maximumSnapSpeed);
-        }
-
-        return verticalVelocity;
+        // Support is vertical, separate from controlled tangent travel. It cannot
+        // increase horizontal speed, and never corrects farther than the measured gap.
+        float supportSpeed = Mathf.Min(
+            GetGroundSnapSpeed(),
+            Mathf.Max(0f, slopeStickSpeed),
+            CurrentGroundInfo.Distance / Mathf.Max(Time.fixedDeltaTime, Mathf.Epsilon));
+        return verticalVelocity - supportSpeed;
     }
 
     private float GetGroundMoveSpeed()
@@ -690,7 +714,7 @@ public class Player : MonoBehaviour
     {
         if (grounded && rb.linearVelocity.y <= 0f)
         {
-            SetVerticalVelocity(groundingForce);
+            SetVerticalVelocity(GetControlledGroundingVelocity());
             return;
         }
 
@@ -845,12 +869,20 @@ public class Player : MonoBehaviour
     {
         if (anim != null && rb != null && hasLocomotionSpeedAnimatorParameter)
         {
+            // Vertical support correction is not stride travel.
+            Vector2 tangent = CurrentGroundInfo.Tangent;
             float movementSpeed = HasGroundContact
-                ? Mathf.Abs(Vector2.Dot(rb.linearVelocity, CurrentGroundInfo.Tangent))
+                ? Mathf.Abs(rb.linearVelocity.x) / Mathf.Max(tangent.x, MinimumTangentHorizontal)
                 : Mathf.Abs(rb.linearVelocity.x);
+            bool isAiming = InputReader != null && InputReader.FocusAimHeld;
+            float referenceSpeed = moveSpeed * (isAiming ? aimingMoveSpeedMultiplier : 1f);
             float normalizedMovementSpeed = Mathf.Clamp01(
-                movementSpeed /
-                Mathf.Max(moveSpeed, MinimumLocomotionSpeedDenominator));
+                movementSpeed / Mathf.Max(referenceSpeed, MinimumLocomotionSpeedDenominator));
+            if (hasWalkPlaybackSpeedAnimatorParameter)
+            {
+                anim.SetFloat(WalkPlaybackSpeedAnimatorParameter,
+                    movementSpeed / Mathf.Max(referenceSpeed, MinimumLocomotionSpeedDenominator));
+            }
 
             anim.SetFloat(
                 locomotionSpeedAnimatorParameterHash,
@@ -938,6 +970,8 @@ public class Player : MonoBehaviour
             anim,
             RunSpeedAnimatorParameter,
             AnimatorControllerParameterType.Float);
+        hasWalkPlaybackSpeedAnimatorParameter = HasAnimatorParameter(
+            anim, WalkPlaybackSpeedAnimatorParameter, AnimatorControllerParameterType.Float);
         locomotionSpeedAnimatorParameterHash = Animator.StringToHash(LocomotionSpeed);
         hasLocomotionSpeedAnimatorParameter = HasAnimatorParameter(
             anim,
@@ -982,24 +1016,15 @@ public class Player : MonoBehaviour
 
     private void RefreshGroundInfo()
     {
-        Bounds bounds =
-            capsuleCollider.bounds;
-
-        Vector2 origin =
-            GetGroundCastOrigin(bounds);
-
-        RaycastHit2D hit =
-            Physics2D.BoxCast(
-                origin,
-                GetGroundCastSize(bounds),
-                0f,
-                Vector2.down,
-                GetGroundCastDistance(),
-                whatIsGround);
-
-        if (IsGroundHitValid(hit))
+        bool isGroundMovementState = stateMachine != null &&
+            (stateMachine.CurrentState == idleState || stateMachine.CurrentState == moveState ||
+             stateMachine.CurrentState == quickStepState);
+        bool canFollowGround = HasGroundContact && isGroundMovementState;
+        // Jump/air states must not retain support while ascending. In particular,
+        // proximity on the first takeoff step must not replenish coyote time.
+        if (IsOnLadder || (!canFollowGround && rb.linearVelocity.y > GroundedVerticalVelocityThreshold))
         {
-            SetGroundContactFromHit(hit, bounds);
+            LoseGroundContact();
             return;
         }
 
@@ -1008,7 +1033,75 @@ public class Player : MonoBehaviour
             return;
         }
 
+        Bounds bounds = capsuleCollider.bounds;
+        float baseReach = GetGroundCastDistance();
+        float predictedSlopeVerticalSpeed = Mathf.Abs(rb.linearVelocity.x) *
+            Mathf.Tan(maxSlopeAngle * Mathf.Deg2Rad);
+        float predictedVerticalTravel = Mathf.Max(
+            Mathf.Abs(rb.linearVelocity.y),
+            predictedSlopeVerticalSpeed) * Time.fixedDeltaTime *
+            Mathf.Max(0f, groundProbePredictionSteps);
+        float reach = isGroundMovementState
+            ? Mathf.Max(baseReach, Mathf.Min(maximumGroundAdhesionDistance, baseReach + predictedVerticalTravel))
+            : baseReach;
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(whatIsGround);
+        filter.useTriggers = false;
+        int hitCount = Physics2D.BoxCast(GetGroundCastOrigin(bounds), GetGroundCastSize(bounds),
+            0f, Vector2.down, filter, groundProbeHits, reach + GroundProbeLift);
+        int nearestHitIndex = -1;
+        float nearestDistance = float.PositiveInfinity;
+        for (int index = 0; index < hitCount; index++)
+        {
+            RaycastHit2D hit = groundProbeHits[index];
+            // Initial overlaps return synthetic inverse-cast normals, not terrain normals.
+            if (!IsGroundHitValid(hit) || hit.distance <= 0f || hit.collider == capsuleCollider)
+            {
+                continue;
+            }
+
+            float gap = Mathf.Max(0f, hit.distance - GroundProbeLift);
+            if (gap > baseReach && !HasContinuousForwardSupport(bounds, hit, reach))
+            {
+                continue;
+            }
+
+            if (hit.distance < nearestDistance)
+            {
+                nearestHitIndex = index;
+                nearestDistance = hit.distance;
+            }
+        }
+
+        if (nearestHitIndex >= 0)
+        {
+            SetGroundContactFromHit(groundProbeHits[nearestHitIndex], bounds);
+            return;
+        }
+
         LoseGroundContact();
+    }
+
+    private bool HasContinuousForwardSupport(Bounds bounds, RaycastHit2D support, float reach)
+    {
+        // An extended cast is only adhesion, never an airborne landing or a ledge magnet.
+        // Require terrain beneath next step's center on the previous support plane.
+        float nextX = bounds.center.x + rb.linearVelocity.x * Time.fixedDeltaTime;
+        Vector2 origin = new Vector2(nextX, bounds.min.y + GroundProbeLift);
+        RaycastHit2D forward = Physics2D.Raycast(origin, Vector2.down,
+            reach + GroundProbeLift, whatIsGround);
+        if (!IsWalkable(forward) || forward.collider.isTrigger || forward.distance <= 0f)
+        {
+            return false;
+        }
+
+        Vector2 oldTangent = lastWalkableGroundInfo.Tangent;
+        float expectedY = lastWalkableGroundInfo.Point.y +
+            (nextX - lastWalkableGroundInfo.Point.x) * oldTangent.y /
+            Mathf.Max(oldTangent.x, MinimumTangentHorizontal);
+        float tolerance = SupportContinuityTolerance + Mathf.Max(0f, groundProbeSkin);
+        return Mathf.Abs(forward.point.y - expectedY) <= tolerance &&
+            Mathf.Abs(forward.point.y - support.point.y) <= reach;
     }
 
     private void SetGroundContactFromHit(
@@ -1023,10 +1116,7 @@ public class Player : MonoBehaviour
                 normal.y,
                 -normal.x).normalized;
 
-        float distance =
-            Mathf.Max(
-                0f,
-                bounds.min.y - hit.point.y);
+        float distance = Mathf.Max(0f, hit.distance - GroundProbeLift);
 
         SetGroundContact(
             normal,
@@ -1037,50 +1127,84 @@ public class Player : MonoBehaviour
 
     private bool TrySetGroundContactFromPhysicsContacts()
     {
-        int contactCount =
-            capsuleCollider.GetContacts(groundContacts);
+        int contactCount = capsuleCollider.GetContacts(groundContacts);
+        bool hadCurrentSupport = currentGroundInfo.HasGround;
+        Vector2 previousNormal = currentGroundInfo.Normal;
+        Vector2 previousPoint = currentGroundInfo.Point;
+        Vector2 previousTangent = currentGroundInfo.Tangent;
+        Bounds bounds = capsuleCollider.bounds;
+        int bestContactIndex = -1;
+        float bestScore = float.PositiveInfinity;
 
         for (int i = 0; i < contactCount; i++)
         {
-            ContactPoint2D contact =
-                groundContacts[i];
-
-            if (contact.otherCollider == null ||
-                !IsLayerInGroundMask(
-                    contact.otherCollider.gameObject.layer))
+            ContactPoint2D contact = groundContacts[i];
+            Collider2D supportCollider = contact.collider == capsuleCollider
+                ? contact.otherCollider : contact.collider;
+            if (supportCollider == null || supportCollider.isTrigger ||
+                !IsLayerInGroundMask(supportCollider.gameObject.layer))
             {
                 continue;
             }
 
-            Vector2 normal =
-                contact.normal.normalized;
-
-            if (normal.y < 0f)
-            {
-                normal = -normal;
-            }
-
+            Vector2 normal = contact.normal.normalized;
+            // Preserve the actual collision normal; an underside is not a floor.
             if (normal.y <= 0f ||
                 Vector2.Angle(normal, Vector2.up) > maxSlopeAngle)
             {
                 continue;
             }
 
-            Vector2 tangent =
-                new Vector2(
-                    normal.y,
-                    -normal.x).normalized;
+            float horizontalOffset = Mathf.Abs(contact.point.x - bounds.center.x) /
+                Mathf.Max(bounds.extents.x, GroundProbeMinimumSize);
+            float score;
+            if (hadCurrentSupport)
+            {
+                float expectedY = previousPoint.y +
+                    (contact.point.x - previousPoint.x) * previousTangent.y /
+                    Mathf.Max(previousTangent.x, MinimumTangentHorizontal);
+                float planeError = Mathf.Abs(contact.point.y - expectedY);
+                float normalError = 1f - Mathf.Clamp01(Vector2.Dot(normal, previousNormal));
+                score = planeError * 4f + normalError * 0.25f + horizontalOffset * 0.05f;
+            }
+            else
+            {
+                // Prefer the highest valid support under the capsule, then the
+                // contact nearest its center. This is independent of contact order.
+                score = -contact.point.y + horizontalOffset * 0.05f +
+                    (1f - normal.y) * 0.01f;
+            }
 
-            SetGroundContact(
-                normal,
-                tangent,
-                contact.point,
-                0f);
+            bool isPreferred = score < bestScore;
+            if (!isPreferred && bestContactIndex >= 0 && Mathf.Approximately(score, bestScore))
+            {
+                ContactPoint2D currentBestContact = groundContacts[bestContactIndex];
+                Vector2 currentBestNormal = currentBestContact.normal.normalized;
+                isPreferred = contact.point.y > currentBestContact.point.y ||
+                    (Mathf.Approximately(contact.point.y, currentBestContact.point.y) &&
+                     (contact.point.x < currentBestContact.point.x ||
+                      (Mathf.Approximately(contact.point.x, currentBestContact.point.x) &&
+                       (normal.y > currentBestNormal.y ||
+                        (Mathf.Approximately(normal.y, currentBestNormal.y) && normal.x < currentBestNormal.x)))));
+            }
 
-            return true;
+            if (isPreferred)
+            {
+                bestScore = score;
+                bestContactIndex = i;
+            }
         }
 
-        return false;
+        if (bestContactIndex < 0)
+        {
+            return false;
+        }
+
+        ContactPoint2D bestContact = groundContacts[bestContactIndex];
+        Vector2 bestNormal = bestContact.normal.normalized;
+        Vector2 bestTangent = new Vector2(bestNormal.y, -bestNormal.x).normalized;
+        SetGroundContact(bestNormal, bestTangent, bestContact.point, 0f);
+        return true;
     }
 
     private bool IsLayerInGroundMask(int layer) =>
@@ -1092,25 +1216,12 @@ public class Player : MonoBehaviour
         Vector2 point,
         float distance)
     {
-        float smoothingFactor = 1f - Mathf.Exp(
-            -Mathf.Max(0f, groundTangentSmoothing) * Time.fixedDeltaTime);
-        Vector2 smoothedTangent = Vector2.Lerp(
-            lastWalkableGroundInfo.Tangent,
-            tangent.normalized,
-            smoothingFactor).normalized;
-
-        float smoothedAngle = Vector2.SignedAngle(
-            Vector2.right,
-            smoothedTangent);
-
-        currentGroundInfo =
-            new GroundInfo(
-                true,
-                normal,
-                smoothedTangent,
-                point,
-                distance,
-                smoothedAngle);
+        // Collision geometry must react immediately at crests. Smooth only visuals,
+        // never the motor tangent: a lagging uphill tangent launches on flatter ground.
+        tangent = new Vector2(normal.y, -normal.x).normalized;
+        currentGroundInfo = new GroundInfo(true, normal, tangent, point, distance,
+            Vector2.SignedAngle(Vector2.right, tangent));
+        groundContactLossSteps = 0;
 
         lastWalkableGroundInfo =
             currentGroundInfo;
@@ -1118,17 +1229,10 @@ public class Player : MonoBehaviour
 
     private void LoseGroundContact()
     {
-        // IMPORTANT:
-        // Losing ground contact does NOT mean we are grounded.
-        // Coyote time should only be started when we actually land.
-        currentGroundInfo =
-            new GroundInfo(
-                false,
-                lastWalkableGroundInfo.Normal,
-                lastWalkableGroundInfo.Tangent,
-                lastWalkableGroundInfo.Point,
-                lastWalkableGroundInfo.Distance,
-                lastWalkableGroundInfo.Angle);
+        hasGroundMotorVelocity = false;
+        groundContactLossSteps = Mathf.Min(groundContactLossSteps + 1, GroundContactLossGraceSteps + 1);
+        currentGroundInfo = new GroundInfo(false, Vector2.up, Vector2.right,
+            Vector2.zero, 0f, 0f);
     }
 
     private bool IsGroundHitValid(RaycastHit2D hit) =>
@@ -1145,6 +1249,9 @@ public class Player : MonoBehaviour
 
     #region Helpers
 
+    private float GetControlledGroundingVelocity() =>
+        Mathf.Clamp(groundingForce, -MaximumGroundingDownwardSpeed, 0f);
+
     private float GetGroundSnapSpeed()
     {
         float gap =
@@ -1159,8 +1266,7 @@ public class Player : MonoBehaviour
     }
 
     private float GetGroundCastDistance() =>
-        groundCheckDistance +
-        groundProbeSkin;
+        Mathf.Max(0f, groundCheckDistance) + Mathf.Max(0f, groundProbeSkin);
 
     private Vector2 GetGroundCastOrigin(
         Bounds bounds)
@@ -1173,9 +1279,7 @@ public class Player : MonoBehaviour
                 ? groundCheck.position.x
                 : bounds.center.x;
 
-        float castOriginY =
-            bounds.min.y -
-            castSize.y * 0.5f;
+        float castOriginY = bounds.min.y + GroundProbeLift + castSize.y * 0.5f;
 
         return new Vector2(
             castOriginX,
@@ -1185,10 +1289,9 @@ public class Player : MonoBehaviour
     private Vector2 GetGroundCastSize(
         Bounds bounds) =>
         new Vector2(
-            Mathf.Min(
-                groundCheckSize.x,
-                bounds.size.x),
-            groundCheckSize.y);
+            Mathf.Clamp(groundCheckSize.x, GroundProbeMinimumSize,
+                Mathf.Max(GroundProbeMinimumSize, bounds.size.x)),
+            Mathf.Max(GroundProbeMinimumSize, groundCheckSize.y));
 
     #endregion
 

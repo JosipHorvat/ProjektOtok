@@ -19,6 +19,13 @@ public class PlayerGroundedState : PlayerState
                 return;
             }
 
+            // Ground contact is sampled per physics step. Wait through one missed
+            // sample so a transient probe gap cannot bounce the state machine.
+            if (!player.IsGroundContactLossConfirmed)
+            {
+                return;
+            }
+
             stateMachine.ChangeState(player.airState);
             return;
         }

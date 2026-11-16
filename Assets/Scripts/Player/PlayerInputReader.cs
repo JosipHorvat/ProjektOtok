@@ -14,14 +14,21 @@ public enum MeleeAttackInputSource
 [DefaultExecutionOrder(-100)]
 public sealed class PlayerInputReader : MonoBehaviour
 {
+    private const float GamepadAimThresholdSqr = 0.04f;
+    private const float MouseAimMovementThresholdSqr = 0.01f;
+    private const string GamepadAimActionName = "GamepadAim";
+    private const string GamepadRightStickBinding = "<Gamepad>/rightStick";
+
     private InputSystem_Actions inputActions;
     private InputAction grabLadderAction;
+    private InputAction gamepadAimAction;
     private Player player;
     private Vector2 moveInput;
     private float lastJumpPressedTime = float.NegativeInfinity;
     private float previousClimbInput;
     private bool climbUpPressedThisFrame;
     private bool meleeAttackCommitted;
+    private bool aimSourceIsGamepad;
 
     [SerializeField]
     private bool logInputDebug = true;
@@ -29,11 +36,37 @@ public sealed class PlayerInputReader : MonoBehaviour
     /// <summary>Current movement input from the Player action map.</summary>
     public Vector2 MoveInput => moveInput;
 
-    /// <summary>Raw mouse screen position or gamepad right-stick aim input.</summary>
-    public Vector2 AimInput =>
-        CanUseCombatInput && inputActions != null
-            ? inputActions.Player.Aim.ReadValue<Vector2>()
-            : Vector2.zero;
+    /// <summary>Mouse screen position or the gamepad right-stick aim vector, selected from the most recently used aim device.</summary>
+    public Vector2 AimInput
+    {
+        get
+        {
+            if (!CanUseCombatInput || inputActions == null)
+            {
+                return Vector2.zero;
+            }
+
+            if (aimSourceIsGamepad)
+            {
+                return gamepadAimAction != null
+                    ? gamepadAimAction.ReadValue<Vector2>()
+                    : Vector2.zero;
+            }
+
+            return Mouse.current != null
+                ? Mouse.current.position.ReadValue()
+                : Vector2.zero;
+        }
+    }
+
+    /// <summary>True while the most recently used aim device is a gamepad.</summary>
+    public bool AimUsesGamepad => CanUseCombatInput && aimSourceIsGamepad;
+
+    /// <summary>True while the gamepad right stick is deflected beyond its aim deadzone.</summary>
+    public bool HasGamepadAimInput =>
+        CanUseCombatInput &&
+        gamepadAimAction != null &&
+        gamepadAimAction.ReadValue<Vector2>().sqrMagnitude >= GamepadAimThresholdSqr;
 
     /// <summary>Returns true while the Fire/Throw action is held.</summary>
     public bool FireThrowHeld =>
@@ -65,10 +98,7 @@ public sealed class PlayerInputReader : MonoBehaviour
         inputActions != null &&
         inputActions.Player.FocusAim.activeControl?.device is Gamepad;
 
-    /// <summary>Returns true when the current aim input comes from a gamepad.</summary>
-    public bool AimUsesGamepad =>
-        inputActions != null &&
-        inputActions.Player.Aim.activeControl?.device is Gamepad;
+
 
     /// <summary>Returns true during the frame in which Reload is pressed.</summary>
     public bool ReloadPressedThisFrame =>
@@ -268,6 +298,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         player = GetComponent<Player>();
         inputActions = new InputSystem_Actions();
+        gamepadAimAction = new InputAction(GamepadAimActionName, InputActionType.Value, GamepadRightStickBinding);
         grabLadderAction = inputActions.asset.FindAction("Player/GrabLadder", false);
         inputActions.Player.Aim.started += OnAimStarted;
     }
@@ -275,12 +306,15 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void OnEnable()
     {
         inputActions?.Player.Enable();
+        gamepadAimAction?.Enable();
     }
 
     private void OnDisable()
     {
         inputActions?.Player.Disable();
+        gamepadAimAction?.Disable();
         ClearGameplayInput();
+        aimSourceIsGamepad = false;
         meleeAttackCommitted = false;
     }
 
@@ -291,6 +325,8 @@ public sealed class PlayerInputReader : MonoBehaviour
             inputActions.Player.Aim.started -= OnAimStarted;
             inputActions.Dispose();
         }
+
+        gamepadAimAction?.Dispose();
     }
 
     private void Update()
@@ -308,6 +344,7 @@ public sealed class PlayerInputReader : MonoBehaviour
             return;
         }
 
+        UpdateAimInputSource();
         Vector2 nextMoveInput = inputActions.Player.Move.ReadValue<Vector2>();
         if (moveInput == Vector2.zero && nextMoveInput != Vector2.zero)
         {
@@ -373,6 +410,31 @@ public sealed class PlayerInputReader : MonoBehaviour
         previousClimbInput = inputActions != null
             ? inputActions.Player.Climb.ReadValue<float>()
             : 0f;
+    }
+
+    private void UpdateAimInputSource()
+    {
+        if (gamepadAimAction != null &&
+            gamepadAimAction.ReadValue<Vector2>().sqrMagnitude >= GamepadAimThresholdSqr)
+        {
+            aimSourceIsGamepad = true;
+            return;
+        }
+
+        if (FocusAimHeld)
+        {
+            aimSourceIsGamepad = FocusAimUsesGamepad;
+            if (aimSourceIsGamepad)
+            {
+                return;
+            }
+        }
+
+        Mouse mouse = Mouse.current;
+        if (mouse != null && mouse.delta.ReadValue().sqrMagnitude >= MouseAimMovementThresholdSqr)
+        {
+            aimSourceIsGamepad = false;
+        }
     }
 
     private void ClearGameplayInput()
