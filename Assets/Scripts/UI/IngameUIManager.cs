@@ -110,26 +110,36 @@ public sealed class IngameUIManager : MonoBehaviour
     [SerializeField] private Slider musicVolumeSlider;
     [SerializeField] private Slider sfxVolumeSlider;
 
-    /// <summary>Opens the authored options panel while gameplay remains paused.</summary>
+    /// <summary>Opens the integrated Options tab in the shared inventory menu while gameplay remains paused.</summary>
     public void OpenOptions()
+    {
+        if (!gameplaySceneActive || inventoryMenuUI == null)
+        {
+            return;
+        }
+
+        if (!inventoryMenuUI.IsOpen)
+        {
+            OpenInventoryMenu(null);
+        }
+
+        if (inventoryMenuUI.IsOpen)
+        {
+            inventoryMenuUI.OpenOptionsTab();
+        }
+    }
+
+    /// <summary>Returns from the integrated Options tab to Items, or closes the legacy panel if active.</summary>
+    public void CloseOptions()
     {
         if (!gameplaySceneActive)
         {
             return;
         }
 
-        inventoryMenuUI?.HideForOtherModal();
-        pauseMenuPanel?.SetActive(false);
-        optionsMenuPanel?.SetActive(true);
-        SyncAudioSliders();
-        SelectSelectable(optionsFirstSelectedControl != null ? optionsFirstSelectedControl : optionsFirstSelectedButton);
-    }
-
-    /// <summary>Returns from the authored options panel to the pause panel.</summary>
-    public void CloseOptions()
-    {
-        if (!gameplaySceneActive)
+        if (inventoryMenuUI != null && inventoryMenuUI.IsOpen)
         {
+            inventoryMenuUI.ReturnToItemsTab();
             return;
         }
 
@@ -545,7 +555,15 @@ public sealed class IngameUIManager : MonoBehaviour
 
         if (inputActions.Player.Pause.WasPressedThisFrame())
         {
-            TogglePauseMenu();
+            if (inventoryMenuUI != null && inventoryMenuUI.IsOptionsTabActive)
+            {
+                inventoryMenuUI.ReturnToItemsTab();
+            }
+            else
+            {
+                TogglePauseMenu();
+            }
+
             return;
         }
 

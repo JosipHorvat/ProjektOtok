@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-/// <summary>Builds and controls the first modal inventory, key-items, and placeholder-tab menu.</summary>
+/// <summary>Builds and controls the shared inventory, key-items, and Options menu tabs.</summary>
 [DisallowMultipleComponent]
 public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
 {
@@ -75,6 +75,12 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
     private Text keyItemDetailText;
     private Text controlLegendText;
     private Text actionPopupHeadingText;
+    private Text masterVolumeValueText;
+    private Text musicVolumeValueText;
+    private Text sfxVolumeValueText;
+    private Slider masterVolumeSlider;
+    private Slider musicVolumeSlider;
+    private Slider sfxVolumeSlider;
     private RectTransform gridContentTransform;
     private RectTransform gridScrollRootTransform;
     private RectTransform comparisonPanel;
@@ -117,7 +123,11 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
     private CanvasGroup movingItemCanvasGroup;
     private string lastControlLegend;
     private bool isOpen;
+    private bool usingGamepadControls;
     private GameObject previouslySelectedObject;
+
+    /// <summary>Gets whether the integrated Options tab is currently selected.</summary>
+    public bool IsOptionsTabActive => isOpen && activeTabIndex == 4;
 
     /// <summary>Gets whether the inventory menu currently owns the modal UI state.</summary>
     public bool IsOpen => isOpen;
@@ -307,25 +317,36 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
 
         int tabCount = tabButtons.Count;
         int nextTabIndex = (activeTabIndex + Math.Sign(direction) + tabCount) % tabCount;
-        if (nextTabIndex == tabCount - 1)
-        {
-            OpenExistingOptions();
-            return;
-        }
-
         SelectTab(nextTabIndex);
     }
 
-    /// <summary>Opens the existing options panel when the Options tab is selected.</summary>
-    public void OpenExistingOptions()
+    /// <summary>Selects the integrated Options tab in the shared inventory menu.</summary>
+    public void OpenOptionsTab()
     {
         if (!isOpen)
         {
             return;
         }
 
-        HideForOtherModal();
-        IngameUIManager.Instance?.OpenOptions();
+        SelectTab(4);
+    }
+
+    /// <summary>Maintains compatibility with callers that previously opened the separate Options panel.</summary>
+    public void OpenExistingOptions()
+    {
+        OpenOptionsTab();
+    }
+
+    /// <summary>Returns from Options to the Items tab without closing the menu.</summary>
+    public void ReturnToItemsTab()
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        SelectTab(1);
+        FocusInitialGridItem();
     }
 
     /// <summary>Closes the menu and resumes gameplay through the existing modal/pause owner.</summary>
@@ -339,6 +360,12 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
     {
         if (!isOpen)
         {
+            return;
+        }
+
+        if (activeTabIndex == 4)
+        {
+            ReturnToItemsTab();
             return;
         }
 
@@ -539,6 +566,8 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             return;
         }
 
+        UpdateLastUsedControlScheme();
+
         if (isMoveMode && EventSystem.current != null)
         {
             UpdateMoveSelection();
@@ -585,6 +614,11 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
                     MoveGridFocus(Vector2Int.right);
                 }
             }
+        }
+
+        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+        {
+            HandleKeyboardSubmit();
         }
 
         if (activeTabIndex == 1 && Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame)
@@ -635,6 +669,92 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
 
         UpdateSelectionPulse();
         RefreshControlsLegend();
+    }
+
+    private void UpdateLastUsedControlScheme()
+    {
+        if (Keyboard.current != null &&
+            (Keyboard.current.wKey.wasPressedThisFrame || Keyboard.current.aKey.wasPressedThisFrame ||
+             Keyboard.current.sKey.wasPressedThisFrame || Keyboard.current.dKey.wasPressedThisFrame ||
+             Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.downArrowKey.wasPressedThisFrame ||
+             Keyboard.current.leftArrowKey.wasPressedThisFrame || Keyboard.current.rightArrowKey.wasPressedThisFrame ||
+             Keyboard.current.spaceKey.wasPressedThisFrame || Keyboard.current.escapeKey.wasPressedThisFrame ||
+             Keyboard.current.mKey.wasPressedThisFrame || Keyboard.current.qKey.wasPressedThisFrame ||
+             Keyboard.current.eKey.wasPressedThisFrame || Keyboard.current.rKey.wasPressedThisFrame))
+        {
+            usingGamepadControls = false;
+        }
+
+        if (Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame))
+        {
+            usingGamepadControls = false;
+        }
+
+        if (Gamepad.current != null &&
+            (Gamepad.current.dpad.up.wasPressedThisFrame || Gamepad.current.dpad.down.wasPressedThisFrame ||
+             Gamepad.current.dpad.left.wasPressedThisFrame || Gamepad.current.dpad.right.wasPressedThisFrame ||
+             Gamepad.current.buttonSouth.wasPressedThisFrame || Gamepad.current.buttonEast.wasPressedThisFrame ||
+             Gamepad.current.buttonWest.wasPressedThisFrame || Gamepad.current.buttonNorth.wasPressedThisFrame ||
+             Gamepad.current.leftShoulder.wasPressedThisFrame || Gamepad.current.rightShoulder.wasPressedThisFrame ||
+             Gamepad.current.leftTrigger.wasPressedThisFrame || Gamepad.current.rightTrigger.wasPressedThisFrame ||
+             Gamepad.current.rightStickButton.wasPressedThisFrame))
+        {
+            usingGamepadControls = true;
+        }
+    }
+
+    private void HandleKeyboardSubmit()
+    {
+        if (activeTabIndex == 4)
+        {
+            return;
+        }
+
+        GameObject selectedObject = EventSystem.current != null
+            ? EventSystem.current.currentSelectedGameObject
+            : null;
+        Button selectedButton = selectedObject != null ? selectedObject.GetComponent<Button>() : null;
+        if (selectedButton != null && selectedButton.isActiveAndEnabled && selectedButton.interactable)
+        {
+            selectedButton.onClick.Invoke();
+            return;
+        }
+
+        if (isActionPopupOpen)
+        {
+            for (int index = 0; index < popupActionButtons.Count; index++)
+            {
+                Button actionButton = popupActionButtons[index];
+                if (actionButton != null && actionButton.interactable)
+                {
+                    actionButton.onClick.Invoke();
+                    return;
+                }
+            }
+        }
+
+        if (isMoveMode)
+        {
+            TryPlaceSelectedItem(movePreviewPosition);
+            return;
+        }
+
+        if (activeTabIndex == 1)
+        {
+            ItemInstance item = GetFocusedCarryItem() ?? GetSelectedCarryItem();
+            if (item != null)
+            {
+                SelectOrMergeItem(item);
+            }
+        }
+        else if (activeTabIndex == 2)
+        {
+            ItemInstance item = GetSelectedKeyItem();
+            if (item != null)
+            {
+                SelectKeyItem(item);
+            }
+        }
     }
 
     private void UpdateSelectionPulse()
@@ -851,13 +971,13 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
         BuildInventoryTab(contentHost);
         BuildKeyItemsTab(contentHost);
         BuildPlaceholderTab(contentHost, "Files Content", "FILES", "Collected documents and lore files will appear here.");
-        BuildPlaceholderTab(contentHost, "Options Content", "OPTIONS", "Select the Options tab to open the existing options menu.");
+        BuildOptionsTab(contentHost);
 
         RectTransform footer = CreatePanel("Footer", window, Color.clear, new Vector2(0.025f, 0.005f), new Vector2(0.975f, 0.07f));
         footer.GetComponent<Image>().raycastTarget = false;
         CreateLabel("Status", footer, string.Empty, 16, TextAnchor.MiddleLeft, new Vector2(0.01f, 0.53f), new Vector2(0.99f, 0.98f));
         inventoryStatusText = footer.Find("Status")?.GetComponent<Text>();
-        controlLegendText = CreateLabel("Control Legend", footer, string.Empty, 21, TextAnchor.MiddleCenter, new Vector2(0.01f, 0.02f), new Vector2(0.99f, 0.55f));
+        controlLegendText = CreateLabel("Control Legend", footer, string.Empty, 15, TextAnchor.MiddleCenter, new Vector2(0.01f, 0.02f), new Vector2(0.99f, 0.55f));
         controlLegendText.fontStyle = FontStyle.Bold;
         CreateItemActionPopup(rootRect);
     }
@@ -1071,6 +1191,7 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             popupActionButtons.Add(actionButton);
         }
 
+        ConfigureVerticalButtons(popupActionButtons);
         PositionItemActionPopup();
         if (EventSystem.current != null)
         {
@@ -1175,34 +1296,87 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             return;
         }
 
+        bool usingController = usingGamepadControls && Gamepad.current != null;
+        string controllerName = usingController
+            ? $"{Gamepad.current.name} {Gamepad.current.displayName}".ToLowerInvariant()
+            : string.Empty;
+        bool isPlayStationController = usingController &&
+            (controllerName.Contains("playstation") || controllerName.Contains("dualsense") ||
+             controllerName.Contains("dualshock") || controllerName.Contains("sony"));
+
         string hint;
-        if (isMoveMode)
+        if (!usingController)
         {
-            hint = "WASD / D-PAD  PLACE     X / A  PLACE     O / B  CANCEL     Q / E OR L2 / R2  ROTATE     L1 / R1  TABS";
+            if (activeTabIndex == 4)
+            {
+                hint = "UP / DOWN CHANGE SETTING   LEFT / RIGHT ADJUST   ESC BACK TO ITEMS   MOUSE TABS";
+            }
+            else if (isMoveMode)
+            {
+                hint = "WASD MOVE BETWEEN CELLS   SPACE PLACE   ESC CANCEL   Q / E ROTATE   MOUSE TABS";
+            }
+            else if (isActionPopupOpen)
+            {
+                hint = "UP / DOWN ACTIONS   SPACE SELECT   M PICK UP / MOVE   ESC BACK";
+            }
+            else if (activeTabIndex == 1)
+            {
+                hint = "WASD MOVE BETWEEN ITEMS   SPACE SELECT   M PICK UP / MOVE   Q / E ROTATE   MOUSE TABS";
+            }
+            else if (activeTabIndex == 2)
+            {
+                hint = "UP / DOWN MOVE BETWEEN ITEMS   SPACE SELECT   ESC CLOSE   MOUSE TABS";
+            }
+            else
+            {
+                hint = "SPACE SELECT   ESC CLOSE   MOUSE TABS";
+            }
         }
-        else if (isActionPopupOpen)
+        else if (isPlayStationController)
         {
-            hint = "SQUARE / M  MOVE ITEM     X / A  SELECT ACTION     O / B  BACK";
-        }
-        else if (activeTabIndex == 1 && (GetSelectedCarryItem() != null || GetFocusedCarryItem() != null))
-        {
-            hint = "WASD / D-PAD  ITEMS     SQUARE / M  MOVE     X / A  ACTIONS     R3  SORT     Q / E OR L2 / R2  ROTATE";
-        }
-        else if (activeTabIndex == 1 && GetSelectedStashItem() != null)
-        {
-            hint = "X / A  ITEM ACTIONS     O / B  CLOSE     L1 / R1  TABS";
-        }
-        else if (activeTabIndex == 1)
-        {
-            hint = "WASD / D-PAD  ITEMS     R3  SORT     X / A  SELECT ITEM     O / B  CLOSE     L1 / R1  TABS";
-        }
-        else if (activeTabIndex == 2 && GetSelectedKeyItem() != null)
-        {
-            hint = "X / A  SELECT ITEM     O / B  CLOSE     L1 / R1  TABS";
+            if (activeTabIndex == 4)
+            {
+                hint = "D-PAD UP / DOWN SETTINGS   LEFT / RIGHT ADJUST   CIRCLE BACK TO ITEMS   L1 / R1 TABS";
+            }
+            else if (isMoveMode)
+            {
+                hint = "D-PAD PLACE   X PLACE   CIRCLE CANCEL   L2 / R2 ROTATE   L1 / R1 TABS";
+            }
+            else if (isActionPopupOpen)
+            {
+                hint = "UP / DOWN ACTIONS   X SELECT   SQUARE PICK UP / MOVE   CIRCLE BACK";
+            }
+            else if (activeTabIndex == 1)
+            {
+                hint = "D-PAD MOVE BETWEEN ITEMS   X SELECT   SQUARE PICK UP / MOVE   R3 SORT   L2 / R2 ROTATE   L1 / R1 TABS";
+            }
+            else
+            {
+                hint = "X SELECT   CIRCLE CLOSE   L1 / R1 TABS";
+            }
         }
         else
         {
-            hint = "X / A  SELECT     O / B  CLOSE     L1 / R1  TABS";
+            if (activeTabIndex == 4)
+            {
+                hint = "D-PAD UP / DOWN SETTINGS   LEFT / RIGHT ADJUST   B BACK TO ITEMS   LB / RB TABS";
+            }
+            else if (isMoveMode)
+            {
+                hint = "D-PAD PLACE   A PLACE   B CANCEL   LT / RT ROTATE   LB / RB TABS";
+            }
+            else if (isActionPopupOpen)
+            {
+                hint = "UP / DOWN ACTIONS   A SELECT   X PICK UP / MOVE   B BACK";
+            }
+            else if (activeTabIndex == 1)
+            {
+                hint = "D-PAD MOVE BETWEEN ITEMS   A SELECT   X PICK UP / MOVE   R3 SORT   LT / RT ROTATE   LB / RB TABS";
+            }
+            else
+            {
+                hint = "A SELECT   B CLOSE   LB / RB TABS";
+            }
         }
 
         if (lastControlLegend != hint)
@@ -1323,14 +1497,120 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
         messageText.horizontalOverflow = HorizontalWrapMode.Wrap;
     }
 
+    private void BuildOptionsTab(RectTransform contentHost)
+    {
+        RectTransform panel = CreatePanel("Options Content", contentHost, PanelColor, Vector2.zero, Vector2.one);
+        tabPanels.Add(panel.gameObject);
+        CreateLabel("Options Heading", panel, "OPTIONS", 30, TextAnchor.MiddleLeft,
+            new Vector2(0.06f, 0.86f), new Vector2(0.94f, 0.98f));
+        CreateLabel("Options Hint", panel, "AUDIO SETTINGS", 16, TextAnchor.MiddleLeft,
+            new Vector2(0.06f, 0.79f), new Vector2(0.94f, 0.86f));
+
+        masterVolumeSlider = CreateVolumeSlider(panel, "Master Volume", 0.62f, 0.77f, out masterVolumeValueText);
+        musicVolumeSlider = CreateVolumeSlider(panel, "Music Volume", 0.40f, 0.55f, out musicVolumeValueText);
+        sfxVolumeSlider = CreateVolumeSlider(panel, "SFX Volume", 0.18f, 0.33f, out sfxVolumeValueText);
+        masterVolumeSlider.onValueChanged.AddListener(value => AudioManager.Instance?.SetMasterVolume(value));
+        musicVolumeSlider.onValueChanged.AddListener(value => AudioManager.Instance?.SetMusicVolume(value));
+        sfxVolumeSlider.onValueChanged.AddListener(value => AudioManager.Instance?.SetSFXVolume(value));
+        ConfigureOptionsSliderNavigation();
+        SyncAudioSettingsToSliders();
+    }
+
+    private Slider CreateVolumeSlider(RectTransform panel, string rowName, float minimumY, float maximumY, out Text valueText)
+    {
+        RectTransform row = CreatePanel(rowName, panel, new Color(0.035f, 0.04f, 0.05f, 1f),
+            new Vector2(0.06f, minimumY), new Vector2(0.94f, maximumY));
+        Outline rowOutline = row.gameObject.AddComponent<Outline>();
+        rowOutline.effectColor = SelectedOutlineColor;
+        rowOutline.effectDistance = new Vector2(3f, -3f);
+        rowOutline.useGraphicAlpha = false;
+        rowOutline.enabled = false;
+
+        string displayName = rowName.Replace(" Volume", string.Empty).ToUpperInvariant();
+        CreateLabel("Setting Name", row, displayName, 19, TextAnchor.MiddleLeft,
+            new Vector2(0.035f, 0.12f), new Vector2(0.27f, 0.88f));
+        valueText = CreateLabel("Setting Value", row, "100%", 16, TextAnchor.MiddleRight,
+            new Vector2(0.89f, 0.12f), new Vector2(0.97f, 0.88f));
+
+        RectTransform sliderRect = CreateRect("Volume Slider", row, new Vector2(0.31f, 0.32f),
+            new Vector2(0.87f, 0.68f), Vector2.zero, Vector2.zero);
+        Image trackImage = sliderRect.gameObject.AddComponent<Image>();
+        trackImage.color = new Color(0.12f, 0.14f, 0.17f, 1f);
+        trackImage.raycastTarget = true;
+
+        RectTransform fillRect = CreateRect("Fill", sliderRect, new Vector2(0f, 0.1f),
+            new Vector2(1f, 0.9f), Vector2.zero, Vector2.zero);
+        Image fillImage = fillRect.gameObject.AddComponent<Image>();
+        fillImage.color = SelectedColor;
+        fillImage.raycastTarget = false;
+
+        RectTransform handleRect = CreateRect("Handle", sliderRect, new Vector2(0f, 0.5f),
+            new Vector2(0f, 0.5f), Vector2.zero, new Vector2(18f, 26f));
+        Image handleImage = handleRect.gameObject.AddComponent<Image>();
+        handleImage.color = TextColor;
+        handleImage.raycastTarget = true;
+
+        Slider slider = sliderRect.gameObject.AddComponent<Slider>();
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.wholeNumbers = false;
+        slider.fillRect = fillRect;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handleImage;
+        slider.value = 1f;
+        Text sliderValueLabel = valueText;
+        slider.onValueChanged.AddListener(value => sliderValueLabel.text = $"{Mathf.RoundToInt(value * 100f)}%");
+
+        EventTrigger focusEvents = sliderRect.gameObject.AddComponent<EventTrigger>();
+        AddPointerEvent(focusEvents, EventTriggerType.Select, () => rowOutline.enabled = true);
+        AddPointerEvent(focusEvents, EventTriggerType.Deselect, () => rowOutline.enabled = false);
+        AddPointerEvent(focusEvents, EventTriggerType.Cancel, () => OnCancel(null));
+        return slider;
+    }
+
+    private void ConfigureOptionsSliderNavigation()
+    {
+        Slider[] sliders = { masterVolumeSlider, musicVolumeSlider, sfxVolumeSlider };
+        for (int index = 0; index < sliders.Length; index++)
+        {
+            Selectable previous = index > 0 ? sliders[index - 1] : null;
+            Selectable next = index + 1 < sliders.Length ? sliders[index + 1] : null;
+            sliders[index].navigation = new Navigation
+            {
+                mode = Navigation.Mode.Explicit,
+                wrapAround = false,
+                selectOnUp = previous,
+                selectOnDown = next,
+                selectOnLeft = null,
+                selectOnRight = null
+            };
+        }
+    }
+
+    private void SyncAudioSettingsToSliders()
+    {
+        float master = AudioManager.Instance != null ? AudioManager.Instance.MasterVolume : 1f;
+        float music = AudioManager.Instance != null ? AudioManager.Instance.MusicVolume : 1f;
+        float sfx = AudioManager.Instance != null ? AudioManager.Instance.SFXVolume : 1f;
+        masterVolumeSlider.SetValueWithoutNotify(master);
+        musicVolumeSlider.SetValueWithoutNotify(music);
+        sfxVolumeSlider.SetValueWithoutNotify(sfx);
+        UpdateVolumeLabel(masterVolumeValueText, master);
+        UpdateVolumeLabel(musicVolumeValueText, music);
+        UpdateVolumeLabel(sfxVolumeValueText, sfx);
+    }
+
+    private static void UpdateVolumeLabel(Text label, float value)
+    {
+        if (label != null)
+        {
+            label.text = $"{Mathf.RoundToInt(value * 100f)}%";
+        }
+    }
+
     private void OnTabSelected(int index)
     {
-        if (index == 4)
-        {
-            OpenExistingOptions();
-            return;
-        }
-
         SelectTab(index);
     }
 
@@ -1352,6 +1632,11 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             {
                 CancelMoveMode();
             }
+
+            if (index != 1 && isActionPopupOpen)
+            {
+                CloseItemActionPopup();
+            }
         }
 
         activeTabIndex = index;
@@ -1372,10 +1657,24 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
         if (activeTabIndex == 1)
         {
             RefreshInventoryView();
+            FocusInitialGridItem();
         }
         else if (activeTabIndex == 2)
         {
             RefreshKeyItemsView();
+            if (EventSystem.current != null && keyItemRows.Count > 0 &&
+                keyItemRows[0] != null && keyItemRows[0].GetComponent<Selectable>() != null)
+            {
+                EventSystem.current.SetSelectedGameObject(keyItemRows[0]);
+            }
+        }
+        else if (activeTabIndex == 4)
+        {
+            SyncAudioSettingsToSliders();
+            if (EventSystem.current != null && masterVolumeSlider != null)
+            {
+                EventSystem.current.SetSelectedGameObject(masterVolumeSlider.gameObject);
+            }
         }
     }
 
@@ -1735,6 +2034,8 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             stashRows.Add(row);
         }
 
+        ConfigureVerticalRows(stashRows);
+
         if (GetSelectedStashItem() == null)
         {
             selectedStashItemInstanceId = null;
@@ -1988,7 +2289,7 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
             keyItemRows.Add(row);
         }
 
-
+        ConfigureVerticalRows(keyItemRows);
 
         ItemInstance selectedKeyItem = GetSelectedKeyItem();
         if (selectedKeyItem == null && keyItems.Count > 0)
@@ -2844,6 +3145,51 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
         return label;
     }
 
+    private static void ConfigureVerticalButtons(IList<Button> buttons)
+    {
+        List<Selectable> controls = new List<Selectable>();
+        for (int index = 0; index < buttons.Count; index++)
+        {
+            if (buttons[index] != null && buttons[index].interactable)
+            {
+                controls.Add(buttons[index]);
+            }
+        }
+
+        ConfigureVerticalSelectables(controls);
+    }
+
+    private static void ConfigureVerticalRows(IList<GameObject> rows)
+    {
+        List<Selectable> controls = new List<Selectable>();
+        for (int index = 0; index < rows.Count; index++)
+        {
+            Selectable selectable = rows[index] != null ? rows[index].GetComponent<Selectable>() : null;
+            if (selectable != null && selectable.interactable)
+            {
+                controls.Add(selectable);
+            }
+        }
+
+        ConfigureVerticalSelectables(controls);
+    }
+
+    private static void ConfigureVerticalSelectables(IList<Selectable> controls)
+    {
+        for (int index = 0; index < controls.Count; index++)
+        {
+            controls[index].navigation = new Navigation
+            {
+                mode = Navigation.Mode.Explicit,
+                wrapAround = false,
+                selectOnUp = index > 0 ? controls[index - 1] : null,
+                selectOnDown = index + 1 < controls.Count ? controls[index + 1] : null,
+                selectOnLeft = null,
+                selectOnRight = null
+            };
+        }
+    }
+
     private Button CreateButton(string objectName, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Color color, int fontSize, UnityEngine.Events.UnityAction onClick)
     {
         GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
@@ -2854,7 +3200,7 @@ public sealed class InventoryMenuUI : MonoBehaviour, ICancelHandler
         image.raycastTarget = true;
         Button button = buttonObject.GetComponent<Button>();
         button.targetGraphic = image;
-        button.navigation = new Navigation { mode = Navigation.Mode.Automatic, wrapAround = false };
+        button.navigation = new Navigation { mode = Navigation.Mode.None };
         button.onClick.AddListener(onClick);
         Outline focusOutline = buttonObject.AddComponent<Outline>();
         focusOutline.effectColor = SelectedOutlineColor;
