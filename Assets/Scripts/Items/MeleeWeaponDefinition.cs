@@ -8,6 +8,9 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
     [Tooltip("Damage applied by a successful melee hit.")]
     [Min(0f)]
     [SerializeField] private float damage = 10f;
+    [Tooltip("Poise added by a successful hit. Stronger melee weapons can stagger in fewer hits.")]
+    [Min(0f)]
+    [SerializeField] private float staggerImpact = 18f;
     [Tooltip("Maximum effective melee reach in world units.")]
     [Min(0.01f)]
     [SerializeField] private float attackRange = 1.5f;
@@ -24,6 +27,9 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
 
     /// <summary>Gets melee hit damage.</summary>
     public float Damage => damage;
+
+    /// <summary>Gets poise impact from a successful melee hit.</summary>
+    public float StaggerImpact => staggerImpact;
 
     /// <summary>Gets melee attack reach.</summary>
     public float AttackRange => attackRange;
@@ -42,6 +48,7 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
     {
         base.OnValidate();
         damage = Mathf.Max(0f, damage);
+        staggerImpact = Mathf.Max(0f, staggerImpact);
         attackRange = Mathf.Max(0.01f, attackRange);
         attackCooldown = Mathf.Max(0.01f, attackCooldown);
     }

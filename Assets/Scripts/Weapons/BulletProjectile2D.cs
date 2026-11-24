@@ -1,6 +1,6 @@
 using UnityEngine;
 
-/// <summary>Moves a visible pistol bullet until it reaches range or its first world collider.</summary>
+/// <summary>Moves a visible bullet, applies damage to damageable hits, and stops at the first collision.</summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(SpriteRenderer))]
 public sealed class BulletProjectile2D : MonoBehaviour
@@ -31,6 +31,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private float remainingDistance;
     private float remainingLifetime;
     private float travelledDistance;
+    private float impactDamage;
+    private float impactStagger;
     private LayerMask collisionLayers;
     private Transform ownerRoot;
     private SpriteRenderer spriteRenderer;
@@ -38,8 +40,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private Material runtimeUnlitMaterial;
     private bool isInitialized;
 
-    /// <summary>Launches this projectile with normalized travel direction and collision filtering.</summary>
-    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner)
+    /// <summary>Launches this projectile with normalized travel direction, damage, stagger impact, and collision filtering.</summary>
+    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner, float damageAmount, float staggerImpactAmount)
     {
         if (travelDirection.sqrMagnitude < MinimumDirectionSqrMagnitude)
         {
@@ -54,6 +56,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
         travelledDistance = 0f;
         collisionLayers = layers.value == 0 ? defaultCollisionLayers : layers;
         ownerRoot = owner;
+        impactDamage = Mathf.Max(0f, damageAmount);
+        impactStagger = Mathf.Max(0f, staggerImpactAmount);
         transform.right = direction;
         spriteRenderer.enabled = true;
         spriteRenderer.color = projectileColor;
@@ -162,6 +166,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
                 }
 
                 transform.position = hits[i].point;
+                ApplyDamage(hitCollider, hits[i].point);
                 if (logProjectileDebug)
                 {
                     Debug.Log($"[BulletProjectile2D] Projectile stopped by {hitCollider.name} after travelling {travelledDistance + hits[i].distance:F2} world units.", this);
@@ -195,6 +200,46 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private bool IsOwnedByShooter(Transform hitTransform)
     {
         return ownerRoot != null && (hitTransform == ownerRoot || hitTransform.IsChildOf(ownerRoot));
+    }
+
+    private void ApplyDamage(Collider2D hitCollider, Vector2 hitPoint)
+    {
+        MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
+        IDamageable2D damageable = null;
+        IHitReactionReceiver2D hitReaction = null;
+        CharacterHitRegion hitRegion = CharacterHitRegion.Torso;
+        bool hasHitRegionMarker = false;
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (damageable == null && components[i] is IDamageable2D damageableComponent)
+            {
+                damageable = damageableComponent;
+            }
+
+            if (hitReaction == null && components[i] is IHitReactionReceiver2D reactionComponent)
+            {
+                hitReaction = reactionComponent;
+            }
+
+            if (!hasHitRegionMarker && components[i] is HitRegionMarker hitRegionMarker)
+            {
+                hitRegion = hitRegionMarker.Region;
+                hasHitRegionMarker = true;
+            }
+
+            if (damageable != null && hitReaction != null && hasHitRegionMarker)
+            {
+                break;
+            }
+        }
+
+        if (damageable == null || impactDamage <= 0f)
+        {
+            return;
+        }
+
+        damageable.ReceiveDamage(impactDamage, hitPoint, direction);
+        hitReaction?.ReceiveHitReaction(impactStagger, hitPoint, direction, hitRegion);
     }
 
     private void OnDestroy()

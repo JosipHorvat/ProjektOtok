@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>Applies horizontal patrol movement and probes the path ahead.</summary>
-public sealed class EnemyPatrolMovement : MonoBehaviour
+public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
 {
     private const int ProbeHitCapacity = 16;
     private const float MinimumVisualScaleMagnitude = 0.0001f;
@@ -54,7 +54,10 @@ public sealed class EnemyPatrolMovement : MonoBehaviour
     private int directionSign;
     private bool isWalking;
     private bool isChasing;
+    private bool isStaggered;
     private Transform chaseTarget;
+    private float movementSlowMultiplier = 1f;
+    private float movementSlowRemaining;
     private bool hasWarnedMissingBody;
     private bool hasWarnedMissingVisualRoot;
 
@@ -99,9 +102,41 @@ public sealed class EnemyPatrolMovement : MonoBehaviour
         ApplyFacing();
     }
 
+    private void Update()
+    {
+        if (movementSlowRemaining <= 0f)
+        {
+            return;
+        }
+
+        movementSlowRemaining -= Time.deltaTime;
+        if (movementSlowRemaining <= 0f)
+        {
+            movementSlowMultiplier = 1f;
+        }
+    }
+
     private void FixedUpdate()
     {
-        if ((!isWalking && !isChasing) || body == null)
+        if (body == null)
+        {
+            return;
+        }
+
+        if (isStaggered)
+        {
+            Vector2 stoppedVelocity = body.linearVelocity;
+            stoppedVelocity.x = 0f;
+            if (TryGetGroundHit(0f, out RaycastHit2D groundHit) && IsGroundedAt(groundHit))
+            {
+                stoppedVelocity.y = 0f;
+            }
+
+            body.linearVelocity = stoppedVelocity;
+            return;
+        }
+
+        if (!isWalking && !isChasing)
         {
             return;
         }
@@ -131,6 +166,7 @@ public sealed class EnemyPatrolMovement : MonoBehaviour
             }
         }
 
+        float currentWalkSpeed = walkSpeed * movementSlowMultiplier;
         if (TryGetGroundHit(0f, out RaycastHit2D currentGroundHit)
             && IsGroundedAt(currentGroundHit)
             && TryGetGroundHit(groundProbeForwardDistance, out RaycastHit2D slopeHit)
@@ -138,11 +174,11 @@ public sealed class EnemyPatrolMovement : MonoBehaviour
             && IsWalkableSlope(slopeHit.normal))
         {
             Vector2 slopeTangent = new Vector2(slopeHit.normal.y, -slopeHit.normal.x).normalized;
-            velocity = slopeTangent * (directionSign * walkSpeed);
+            velocity = slopeTangent * (directionSign * currentWalkSpeed);
         }
         else
         {
-            velocity.x = directionSign * walkSpeed;
+            velocity.x = directionSign * currentWalkSpeed;
         }
 
         body.linearVelocity = velocity;
@@ -195,6 +231,40 @@ public sealed class EnemyPatrolMovement : MonoBehaviour
         isWalking = false;
         chaseTarget = target;
         isChasing = target != null;
+    }
+
+    /// <summary>Applies a temporary movement slow, retaining the strongest active multiplier.</summary>
+    public void ApplyTemporaryMovementSlow(float speedMultiplier, float duration)
+    {
+        if (duration <= 0f)
+        {
+            return;
+        }
+
+        float clampedMultiplier = Mathf.Clamp(speedMultiplier, 0.1f, 1f);
+        movementSlowMultiplier = movementSlowRemaining > 0f
+            ? Mathf.Min(movementSlowMultiplier, clampedMultiplier)
+            : clampedMultiplier;
+        movementSlowRemaining = Mathf.Max(movementSlowRemaining, duration);
+    }
+
+    /// <summary>Stops or resumes patrol/chase movement during a stagger without changing AI state.</summary>
+    public void SetStaggered(bool staggered)
+    {
+        isStaggered = staggered;
+        if (!staggered || body == null)
+        {
+            return;
+        }
+
+        Vector2 velocity = body.linearVelocity;
+        velocity.x = 0f;
+        if (TryGetGroundHit(0f, out RaycastHit2D groundHit) && IsGroundedAt(groundHit))
+        {
+            velocity.y = 0f;
+        }
+
+        body.linearVelocity = velocity;
     }
 
     /// <summary>Reverses patrol direction and flips only the assigned visual root.</summary>

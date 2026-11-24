@@ -16,7 +16,6 @@ MonoBehaviour:
   displayName: Reload Test (Round-by-Round)
   description: Test-only weapon definition for validating round-by-round reload behavior.
   inventoryIcon: {fileID: 21300000, guid: b903da7ed8023394e92fc6e63539576e, type: 3}
-  category: 0
   tags:
   - test-only
   - weapon
@@ -33,12 +32,12 @@ MonoBehaviour:
   protectedFromDiscard: 1
   buyPrice: 0
   sellPrice: 0
-  itemAmmunitionType: 0
   fireMode: 0
   ammunitionType: 3
   shotsPerSecond: 2.5
   magazineCapacity: 8
   damage: 10
+  staggerImpact: 18
   pierce: 0
   shotPower: 1
   projectilePrefab: {fileID: 6755061141863262301, guid: f07f4aba246172a4bb7ad199a8b3595c, type: 3}
@@ -74,3 +73,4 @@ MonoBehaviour:
   roundByRoundReloadTrigger: ReloadRoundByRound
   reloadSpeedParameter: ReloadSpeed
   reloadCancelTrigger: ReloadComplete
+  upgradeOptions: []

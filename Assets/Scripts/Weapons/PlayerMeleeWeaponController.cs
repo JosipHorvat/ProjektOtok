@@ -18,6 +18,7 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     private const float BackupDamage = 5f;
     private const float BackupAttackRange = 1f;
     private const float BackupAttackCooldown = 0.8f;
+    private const float BackupStaggerImpact = 12f;
 
     [Header("Visuals")]
     [SerializeField] private SpriteRenderer offhandKnifeRenderer;
@@ -89,8 +90,8 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
         return definition != null;
     }
 
-    /// <summary>Gets the damage, reach, and cooldown from the carried knife or the built-in backup.</summary>
-    public void GetActiveStats(out float damage, out float attackRange, out float attackCooldown)
+    /// <summary>Gets the damage, reach, cooldown, and poise impact from the carried knife or built-in backup.</summary>
+    public void GetActiveStats(out float damage, out float attackRange, out float attackCooldown, out float staggerImpact)
     {
         MeleeWeaponDefinition definition = FindCarriedCombatKnifeDefinition();
         if (definition != null)
@@ -98,12 +99,14 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
             damage = definition.Damage;
             attackRange = definition.AttackRange;
             attackCooldown = definition.AttackCooldown;
+            staggerImpact = definition.StaggerImpact;
             return;
         }
 
         damage = BackupDamage;
         attackRange = BackupAttackRange;
         attackCooldown = BackupAttackCooldown;
+        staggerImpact = BackupStaggerImpact;
     }
 
     /// <summary>Shows the hand knife only during the committed attack's draw-to-resheath interval; otherwise shows the hip knife.</summary>

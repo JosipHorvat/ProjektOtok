@@ -63,6 +63,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     private readonly HashSet<IDamageable2D> damagedTargets = new HashSet<IDamageable2D>();
     private Vector2 attackDirection;
     private float activeDamage;
+    private float activeStaggerImpact;
     private float activeAttackRange;
     private float activeAttackCooldown;
     private float impactTime;
@@ -237,7 +238,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             return false;
         }
 
-        meleeWeaponController.GetActiveStats(out activeDamage, out activeAttackRange, out activeAttackCooldown);
+        meleeWeaponController.GetActiveStats(out activeDamage, out activeAttackRange, out activeAttackCooldown, out activeStaggerImpact);
         activeAttackRange = Mathf.Max(MinimumAttackRange, activeAttackRange);
         activeAttackCooldown = Mathf.Max(MinimumAttackCooldown, activeAttackCooldown);
         activeSlashTrigger = StandardSlashTrigger;
@@ -363,6 +364,8 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
 
             Vector2 hitPoint = hitCollider.ClosestPoint(boxCenter + attackDirection * (activeAttackRange * 0.5f));
             damageable.ReceiveDamage(activeDamage, hitPoint, attackDirection);
+            IHitReactionReceiver2D hitReaction = FindHitReactionReceiver(hitCollider);
+            hitReaction?.ReceiveHitReaction(activeStaggerImpact, hitPoint, attackDirection, FindHitRegion(hitCollider));
         }
     }
 
@@ -389,6 +392,26 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         }
 
         return null;
+    }
+
+    private static IHitReactionReceiver2D FindHitReactionReceiver(Collider2D hitCollider)
+    {
+        MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
+        for (int index = 0; index < components.Length; index++)
+        {
+            if (components[index] is IHitReactionReceiver2D hitReaction)
+            {
+                return hitReaction;
+            }
+        }
+
+        return null;
+    }
+
+    private static CharacterHitRegion FindHitRegion(Collider2D hitCollider)
+    {
+        HitRegionMarker marker = hitCollider.GetComponentInParent<HitRegionMarker>();
+        return marker != null ? marker.Region : CharacterHitRegion.Torso;
     }
 
     private bool ShouldCancelAttack()

@@ -15,7 +15,12 @@ GameObject:
   - component: {fileID: 2832182408004541172}
   - component: {fileID: 1702534286710731856}
   - component: {fileID: 3641175208541706497}
-  m_Layer: 0
+  - component: {fileID: 2516496084907793834}
+  - component: {fileID: 3802380583740457308}
+  - component: {fileID: 2427429946951050644}
+  - component: {fileID: 5452529083781782242}
+  - component: {fileID: 3681056214616929979}
+  m_Layer: 12
   m_Name: EnemyHuman
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -187,6 +192,83 @@ MonoBehaviour:
   visionBlockerLayers:
     serializedVersion: 2
     m_Bits: 1024
+--- !u!114 &2516496084907793834
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220391121948307776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee48cec884390c141afa83f70ac030ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealth
+  maximumHealth: 100
+--- !u!114 &3802380583740457308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220391121948307776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 574b9794155373b4eaca00c2ba8919dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyDeathHandler
+  animator: {fileID: 0}
+--- !u!114 &2427429946951050644
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220391121948307776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c013c451ab81444c99969e146efe0a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterVisualFeedback
+  damageEventSource: {fileID: 2516496084907793834}
+  spriteRenderers: []
+  hitFlashColor: {r: 1, g: 0.05, b: 0.05, a: 1}
+  hitFlashDuration: 0.1
+--- !u!114 &5452529083781782242
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220391121948307776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 391e82722d3513e498f78fb04321e345, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterStagger
+  damageEventSource: {fileID: 2516496084907793834}
+  movementAdapter: {fileID: 7768595087744486784}
+  animator: {fileID: 1245424916844986763}
+  hitSlowMultiplier: 0.85
+  hitSlowDuration: 0.12
+  poiseThreshold: 30
+  staggerDuration: 0.35
+  staggerCooldown: 1.5
+  poiseRecoveryDelay: 0.8
+  poiseRecoveryRate: 18
+--- !u!114 &3681056214616929979
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220391121948307776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b70c073ffa9dec41821e71e126aced2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitRegionMarker
+  region: 0
 --- !u!1001 &5389708315569718665
 PrefabInstance:
   m_ObjectHideFlags: 0

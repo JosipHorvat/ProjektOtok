@@ -37,6 +37,7 @@ MonoBehaviour:
   shotsPerSecond: 2.5
   magazineCapacity: 20
   damage: 18
+  staggerImpact: 12
   pierce: 0
   shotPower: 1
   projectilePrefab: {fileID: 6755061141863262301, guid: f07f4aba246172a4bb7ad199a8b3595c, type: 3}
@@ -44,7 +45,7 @@ MonoBehaviour:
   range: 25
   hitLayers:
     serializedVersion: 2
-    m_Bits: 1280
+    m_Bits: 5376
   hipFireSpread: 4
   aimedSpread: 0
   aimedSpreadIncreasePerShot: 0.9

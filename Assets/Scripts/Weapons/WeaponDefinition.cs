@@ -30,6 +30,8 @@ public sealed class WeaponDefinition : ItemDefinition
     [Min(0.01f)] public float shotsPerSecond = 2.5f;
     [Min(1)] public int magazineCapacity = 10;
     [Min(0f)] public float damage = 18f;
+    [Tooltip("Poise added per hit. Higher values stagger sooner; rapid-fire weapons should usually use lower values.")]
+    [Min(0f)] public float staggerImpact = 4f;
     [Min(0)] public int pierce;
     [Min(0f)] public float shotPower = 1f;
 
@@ -108,6 +110,9 @@ public sealed class WeaponDefinition : ItemDefinition
 
     public float Damage => damage;
 
+    /// <summary>Gets weapon poise impact applied on a successful hit.</summary>
+    public float StaggerImpact => staggerImpact;
+
     public int Pierce => pierce;
 
     public float ShotPower => shotPower;
@@ -163,6 +168,7 @@ public sealed class WeaponDefinition : ItemDefinition
         reloadDuration = Mathf.Max(0.05f, reloadDuration);
         roundInsertInterval = Mathf.Max(0.05f, roundInsertInterval);
         magazineCapacity = Mathf.Max(1, magazineCapacity);
+        staggerImpact = Mathf.Max(0f, staggerImpact);
 
         if (upgradeOptions == null)
         {

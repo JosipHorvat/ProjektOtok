@@ -30,6 +30,7 @@ public sealed class EnemyPatrolStateMachine : MonoBehaviour
 
     private EnemyPatrolMovement movement;
     private EnemyPlayerDetector playerDetector;
+    private CharacterStagger characterStagger;
     private Transform chaseTarget;
     private float idleTimeRemaining;
     private float lostPlayerTime;
@@ -45,6 +46,7 @@ public sealed class EnemyPatrolStateMachine : MonoBehaviour
     {
         movement = GetComponent<EnemyPatrolMovement>();
         playerDetector = GetComponent<EnemyPlayerDetector>();
+        characterStagger = GetComponent<CharacterStagger>();
         CurrentState = EnemyPatrolState.Idle;
         idleTimeRemaining = initialIdleDuration;
 
@@ -83,7 +85,7 @@ public sealed class EnemyPatrolStateMachine : MonoBehaviour
 
     private void Update()
     {
-        if (movement == null)
+        if (movement == null || characterStagger != null && characterStagger.IsStaggered)
         {
             return;
         }

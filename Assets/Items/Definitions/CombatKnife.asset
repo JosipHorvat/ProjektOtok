@@ -31,6 +31,7 @@ MonoBehaviour:
   buyPrice: 0
   sellPrice: 0
   damage: 10
+  staggerImpact: 22
   attackRange: 1.5
   attackCooldown: 0.6
   hitVolumePrefab: {fileID: 0}

@@ -2685,6 +2685,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1951741612}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!95 &1223056268 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 1245424916844986763, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+  m_PrefabInstance: {fileID: 4532655638978095304}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1267419300
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -11423,6 +11428,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: EnemyHuman
       objectReference: {fileID: 0}
+    - target: {fileID: 220391121948307776, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
     - target: {fileID: 551466357652266556, guid: 9976b1b175f109b438e55965077196fd, type: 3}
       propertyPath: m_LocalRotation.w
       value: -0.03500624
@@ -11447,6 +11456,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: -156.879
       objectReference: {fileID: 0}
+    - target: {fileID: 2427429946951050644, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      propertyPath: health
+      value: 
+      objectReference: {fileID: 4532655638978095309}
+    - target: {fileID: 2427429946951050644, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      propertyPath: damageEventSource
+      value: 
+      objectReference: {fileID: 4532655638978095309}
     - target: {fileID: 3221550496950898347, guid: 9976b1b175f109b438e55965077196fd, type: 3}
       propertyPath: m_LocalRotation.z
       value: -0.041037302
@@ -11627,7 +11644,16 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4634958932449439229, guid: 9976b1b175f109b438e55965077196fd, type: 3}
       insertIndex: -1
       addedObject: {fileID: 442999572}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 220391121948307776, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4532655638978095309}
+    - targetCorrespondingSourceObject: {fileID: 220391121948307776, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4532655638978095308}
+    - targetCorrespondingSourceObject: {fileID: 220391121948307776, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4532655638978095310}
   m_SourcePrefab: {fileID: 100100000, guid: 9976b1b175f109b438e55965077196fd, type: 3}
 --- !u!4 &4532655638978095305 stripped
 Transform:
@@ -11639,12 +11665,65 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7768595087744486784, guid: 9976b1b175f109b438e55965077196fd, type: 3}
   m_PrefabInstance: {fileID: 4532655638978095304}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 4532655638978095307}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 27db5333f42ab3f4fbc27e7e72b39581, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyPatrolMovement
+--- !u!1 &4532655638978095307 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 220391121948307776, guid: 9976b1b175f109b438e55965077196fd, type: 3}
+  m_PrefabInstance: {fileID: 4532655638978095304}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &4532655638978095308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4532655638978095307}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 574b9794155373b4eaca00c2ba8919dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyDeathHandler
+  animator: {fileID: 0}
+--- !u!114 &4532655638978095309
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4532655638978095307}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee48cec884390c141afa83f70ac030ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealth
+  maximumHealth: 100
+--- !u!114 &4532655638978095310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4532655638978095307}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 391e82722d3513e498f78fb04321e345, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterStagger
+  damageEventSource: {fileID: 4532655638978095309}
+  movementAdapter: {fileID: 4532655638978095306}
+  animator: {fileID: 1223056268}
+  hitSlowMultiplier: 0.85
+  hitSlowDuration: 0.12
+  poiseThreshold: 30
+  staggerDuration: 0.35
+  staggerCooldown: 1.5
+  poiseRecoveryDelay: 0.8
+  poiseRecoveryRate: 18
 --- !u!212 &4654429634630636503
 SpriteRenderer:
   serializedVersion: 3
