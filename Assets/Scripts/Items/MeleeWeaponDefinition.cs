@@ -8,6 +8,12 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
     [Tooltip("Damage applied by a successful melee hit.")]
     [Min(0f)]
     [SerializeField] private float damage = 10f;
+    [Tooltip("Chance for a successful melee hit to critically strike, from 0 to 1.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float criticalChance = 0.08f;
+    [Tooltip("Damage multiplier applied when a melee hit is critical.")]
+    [Min(1f)]
+    [SerializeField] private float criticalMultiplier = 1.5f;
     [Tooltip("Poise added by a successful hit. Stronger melee weapons can stagger in fewer hits.")]
     [Min(0f)]
     [SerializeField] private float staggerImpact = 18f;
@@ -26,6 +32,12 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
     public override ItemCategory Category => ItemCategory.Weapon;
 
     /// <summary>Gets melee hit damage.</summary>
+
+    /// <summary>Gets the probability that a successful hit is critical.</summary>
+    public float CriticalChance => criticalChance;
+
+    /// <summary>Gets the damage multiplier applied to a critical hit.</summary>
+    public float CriticalMultiplier => criticalMultiplier;
     public float Damage => damage;
 
     /// <summary>Gets poise impact from a successful melee hit.</summary>
@@ -48,6 +60,8 @@ public sealed class MeleeWeaponDefinition : ItemDefinition
     {
         base.OnValidate();
         damage = Mathf.Max(0f, damage);
+        criticalChance = Mathf.Clamp01(criticalChance);
+        criticalMultiplier = Mathf.Max(1f, criticalMultiplier);
         staggerImpact = Mathf.Max(0f, staggerImpact);
         attackRange = Mathf.Max(0.01f, attackRange);
         attackCooldown = Mathf.Max(0.01f, attackCooldown);

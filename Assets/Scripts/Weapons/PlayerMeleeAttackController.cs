@@ -63,6 +63,8 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
     private readonly HashSet<IDamageable2D> damagedTargets = new HashSet<IDamageable2D>();
     private Vector2 attackDirection;
     private float activeDamage;
+    private float activeCriticalChance;
+    private float activeCriticalMultiplier = 1f;
     private float activeStaggerImpact;
     private float activeAttackRange;
     private float activeAttackCooldown;
@@ -239,6 +241,7 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         }
 
         meleeWeaponController.GetActiveStats(out activeDamage, out activeAttackRange, out activeAttackCooldown, out activeStaggerImpact);
+        meleeWeaponController.GetActiveCriticalStats(out activeCriticalChance, out activeCriticalMultiplier);
         activeAttackRange = Mathf.Max(MinimumAttackRange, activeAttackRange);
         activeAttackCooldown = Mathf.Max(MinimumAttackCooldown, activeAttackCooldown);
         activeSlashTrigger = StandardSlashTrigger;
@@ -363,9 +366,30 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             }
 
             Vector2 hitPoint = hitCollider.ClosestPoint(boxCenter + attackDirection * (activeAttackRange * 0.5f));
-            damageable.ReceiveDamage(activeDamage, hitPoint, attackDirection);
+            HitRegionMarker regionMarker = HitRegionMarker.FindAtHitPoint(hitCollider, damageable, hitPoint);
+            CharacterHitRegion hitRegion = regionMarker != null ? regionMarker.Region : CharacterHitRegion.Torso;
+            float regionDamageMultiplier = regionMarker != null ? regionMarker.DamageMultiplier : 1f;
+            EnemyHealth targetHealth = damageable as EnemyHealth;
+            CombatHitData hitData = new CombatHitData(
+                activeDamage,
+                regionDamageMultiplier,
+                activeCriticalChance,
+                activeCriticalMultiplier,
+                hitRegion,
+                hitPoint,
+                attackDirection,
+                targetHealth != null ? targetHealth.CurrentHealth : 0f,
+                targetHealth != null ? targetHealth.MaximumHealth : 0f);
+            IHitRegionDamageReceiver2D regionDamageReceiver = FindHitRegionDamageReceiver(hitCollider);
+            if (hitData.FinalDamage <= 0f)
+            {
+                continue;
+            }
+
+            regionDamageReceiver?.ReceiveHitRegionDamage(hitData);
+            damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, attackDirection);
             IHitReactionReceiver2D hitReaction = FindHitReactionReceiver(hitCollider);
-            hitReaction?.ReceiveHitReaction(activeStaggerImpact, hitPoint, attackDirection, FindHitRegion(hitCollider));
+            hitReaction?.ReceiveHitReaction(activeStaggerImpact, hitPoint, attackDirection, hitRegion);
         }
     }
 
@@ -402,6 +426,20 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             if (components[index] is IHitReactionReceiver2D hitReaction)
             {
                 return hitReaction;
+            }
+        }
+
+        return null;
+    }
+
+    private static IHitRegionDamageReceiver2D FindHitRegionDamageReceiver(Collider2D hitCollider)
+    {
+        MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
+        for (int index = 0; index < components.Length; index++)
+        {
+            if (components[index] is IHitRegionDamageReceiver2D regionDamageReceiver)
+            {
+                return regionDamageReceiver;
             }
         }
 

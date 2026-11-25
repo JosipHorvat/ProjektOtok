@@ -33,6 +33,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private float travelledDistance;
     private float impactDamage;
     private float impactStagger;
+    private float criticalChance;
+    private float criticalMultiplier = 1f;
     private LayerMask collisionLayers;
     private Transform ownerRoot;
     private SpriteRenderer spriteRenderer;
@@ -40,8 +42,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private Material runtimeUnlitMaterial;
     private bool isInitialized;
 
-    /// <summary>Launches this projectile with normalized travel direction, damage, stagger impact, and collision filtering.</summary>
-    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner, float damageAmount, float staggerImpactAmount)
+    /// <summary>Launches this projectile with damage, critical-hit settings, stagger impact, and collision filtering.</summary>
+    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner, float damageAmount, float staggerImpactAmount, float criticalChanceAmount, float criticalDamageMultiplier)
     {
         if (travelDirection.sqrMagnitude < MinimumDirectionSqrMagnitude)
         {
@@ -58,6 +60,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
         ownerRoot = owner;
         impactDamage = Mathf.Max(0f, damageAmount);
         impactStagger = Mathf.Max(0f, staggerImpactAmount);
+        criticalChance = Mathf.Clamp01(criticalChanceAmount);
+        criticalMultiplier = Mathf.Max(1f, criticalDamageMultiplier);
         transform.right = direction;
         spriteRenderer.enabled = true;
         spriteRenderer.color = projectileColor;
@@ -207,8 +211,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
         MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
         IDamageable2D damageable = null;
         IHitReactionReceiver2D hitReaction = null;
-        CharacterHitRegion hitRegion = CharacterHitRegion.Torso;
-        bool hasHitRegionMarker = false;
+        IHitRegionDamageReceiver2D hitRegionDamageReceiver = null;
         for (int i = 0; i < components.Length; i++)
         {
             if (damageable == null && components[i] is IDamageable2D damageableComponent)
@@ -221,13 +224,12 @@ public sealed class BulletProjectile2D : MonoBehaviour
                 hitReaction = reactionComponent;
             }
 
-            if (!hasHitRegionMarker && components[i] is HitRegionMarker hitRegionMarker)
+            if (hitRegionDamageReceiver == null && components[i] is IHitRegionDamageReceiver2D regionDamageReceiver)
             {
-                hitRegion = hitRegionMarker.Region;
-                hasHitRegionMarker = true;
+                hitRegionDamageReceiver = regionDamageReceiver;
             }
 
-            if (damageable != null && hitReaction != null && hasHitRegionMarker)
+            if (damageable != null && hitReaction != null && hitRegionDamageReceiver != null)
             {
                 break;
             }
@@ -238,7 +240,28 @@ public sealed class BulletProjectile2D : MonoBehaviour
             return;
         }
 
-        damageable.ReceiveDamage(impactDamage, hitPoint, direction);
+        HitRegionMarker regionMarker = HitRegionMarker.FindAtHitPoint(hitCollider, damageable, hitPoint);
+        CharacterHitRegion hitRegion = regionMarker != null ? regionMarker.Region : CharacterHitRegion.Torso;
+        float regionDamageMultiplier = regionMarker != null ? regionMarker.DamageMultiplier : 1f;
+        EnemyHealth targetHealth = damageable as EnemyHealth;
+        CombatHitData hitData = new CombatHitData(
+            impactDamage,
+            regionDamageMultiplier,
+            criticalChance,
+            criticalMultiplier,
+            hitRegion,
+            hitPoint,
+            direction,
+            targetHealth != null ? targetHealth.CurrentHealth : 0f,
+            targetHealth != null ? targetHealth.MaximumHealth : 0f);
+
+        if (hitData.FinalDamage <= 0f)
+        {
+            return;
+        }
+
+        hitRegionDamageReceiver?.ReceiveHitRegionDamage(hitData);
+        damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, direction);
         hitReaction?.ReceiveHitReaction(impactStagger, hitPoint, direction, hitRegion);
     }
 

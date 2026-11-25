@@ -1,9 +1,10 @@
 using UnityEngine;
 
-/// <summary>Maps enemy locomotion states to the Animator's IsWalking boolean.</summary>
+/// <summary>Maps patrol and chase states to the Animator's locomotion parameters.</summary>
 public sealed class EnemyAnimatorBridge : MonoBehaviour
 {
     private const string IsWalkingParameter = "IsWalking";
+    private const string IsChasingParameter = "IsChasing";
 
     [Header("References")]
     [Tooltip("Animator receiving the IsWalking boolean. Automatically cached from this GameObject or its children when left empty.")]
@@ -44,7 +45,7 @@ public sealed class EnemyAnimatorBridge : MonoBehaviour
 
         if (animator != null)
         {
-            animator.SetBool(IsWalkingParameter, stateMachine != null && stateMachine.CurrentState == EnemyPatrolState.Walk);
+            ApplyLocomotionState(stateMachine != null ? stateMachine.CurrentState : EnemyPatrolState.Idle);
         }
     }
 
@@ -60,7 +61,13 @@ public sealed class EnemyAnimatorBridge : MonoBehaviour
     {
         if (animator != null)
         {
-            animator.SetBool(IsWalkingParameter, state != EnemyPatrolState.Idle);
+            ApplyLocomotionState(state);
         }
+    }
+
+    private void ApplyLocomotionState(EnemyPatrolState state)
+    {
+        animator.SetBool(IsWalkingParameter, state != EnemyPatrolState.Idle);
+        animator.SetBool(IsChasingParameter, state == EnemyPatrolState.Chase);
     }
 }

@@ -30,6 +30,10 @@ public sealed class WeaponDefinition : ItemDefinition
     [Min(0.01f)] public float shotsPerSecond = 2.5f;
     [Min(1)] public int magazineCapacity = 10;
     [Min(0f)] public float damage = 18f;
+    [Tooltip("Chance for each successful projectile hit to critically strike, from 0 to 1.")]
+    [Range(0f, 1f)] public float criticalChance = 0.08f;
+    [Tooltip("Damage multiplier applied when a hit is critical.")]
+    [Min(1f)] public float criticalMultiplier = 1.5f;
     [Tooltip("Poise added per hit. Higher values stagger sooner; rapid-fire weapons should usually use lower values.")]
     [Min(0f)] public float staggerImpact = 4f;
     [Min(0)] public int pierce;
@@ -110,6 +114,12 @@ public sealed class WeaponDefinition : ItemDefinition
 
     public float Damage => damage;
 
+    /// <summary>Gets the probability that a successful hit is critical.</summary>
+    public float CriticalChance => criticalChance;
+
+    /// <summary>Gets the damage multiplier applied to a critical hit.</summary>
+    public float CriticalMultiplier => criticalMultiplier;
+
     /// <summary>Gets weapon poise impact applied on a successful hit.</summary>
     public float StaggerImpact => staggerImpact;
 
@@ -168,6 +178,9 @@ public sealed class WeaponDefinition : ItemDefinition
         reloadDuration = Mathf.Max(0.05f, reloadDuration);
         roundInsertInterval = Mathf.Max(0.05f, roundInsertInterval);
         magazineCapacity = Mathf.Max(1, magazineCapacity);
+        damage = Mathf.Max(0f, damage);
+        criticalChance = Mathf.Clamp01(criticalChance);
+        criticalMultiplier = Mathf.Max(1f, criticalMultiplier);
         staggerImpact = Mathf.Max(0f, staggerImpact);
 
         if (upgradeOptions == null)

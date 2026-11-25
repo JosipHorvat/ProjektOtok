@@ -55,6 +55,7 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     private bool isWalking;
     private bool isChasing;
     private bool isStaggered;
+    private bool isAttackPaused;
     private Transform chaseTarget;
     private float movementSlowMultiplier = 1f;
     private float movementSlowRemaining;
@@ -133,6 +134,14 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
             }
 
             body.linearVelocity = stoppedVelocity;
+            return;
+        }
+
+        if (isAttackPaused)
+        {
+            Vector2 pausedVelocity = body.linearVelocity;
+            pausedVelocity.x = 0f;
+            body.linearVelocity = pausedVelocity;
             return;
         }
 
@@ -231,6 +240,43 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
         isWalking = false;
         chaseTarget = target;
         isChasing = target != null;
+        FaceTarget(target);
+    }
+
+    /// <summary>Faces a target horizontally without changing the current movement state.</summary>
+    public void FaceTarget(Transform target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        float horizontalDistance = target.position.x - transform.position.x;
+        if (Mathf.Abs(horizontalDistance) <= Mathf.Epsilon)
+        {
+            return;
+        }
+
+        int targetDirection = horizontalDistance > 0f ? 1 : -1;
+        if (targetDirection != directionSign)
+        {
+            directionSign = targetDirection;
+            ApplyFacing();
+        }
+    }
+
+    /// <summary>Pauses horizontal movement while the attack animation plays, preserving vertical physics.</summary>
+    public void SetAttackPaused(bool paused)
+    {
+        isAttackPaused = paused;
+        if (!paused || body == null)
+        {
+            return;
+        }
+
+        Vector2 velocity = body.linearVelocity;
+        velocity.x = 0f;
+        body.linearVelocity = velocity;
     }
 
     /// <summary>Applies a temporary movement slow, retaining the strongest active multiplier.</summary>

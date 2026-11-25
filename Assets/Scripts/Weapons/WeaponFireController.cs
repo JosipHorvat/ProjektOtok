@@ -312,7 +312,7 @@ public sealed class WeaponFireController : MonoBehaviour
 
         BulletProjectile2D bullet = Instantiate(projectilePrefab, bulletEjectPoint.position, shotRotation);
         Transform ownerRoot = player != null ? player.transform : transform.root;
-        bullet.Initialize(direction, definition.ProjectileSpeed, definition.Range, definition.HitLayers, ownerRoot, definition.Damage, definition.StaggerImpact);
+        bullet.Initialize(direction, definition.ProjectileSpeed, definition.Range, definition.HitLayers, ownerRoot, definition.Damage, definition.StaggerImpact, definition.CriticalChance, definition.CriticalMultiplier);
         if (logShotDebug)
         {
             Debug.Log($"[WeaponFire] Spawned projectile at bullet eject point {bulletEjectPoint.position} heading {direction}, ammo remaining={ammoState.LoadedRounds}.", bullet);

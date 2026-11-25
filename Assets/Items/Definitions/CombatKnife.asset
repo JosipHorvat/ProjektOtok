@@ -32,6 +32,7 @@ MonoBehaviour:
   sellPrice: 0
   damage: 10
   staggerImpact: 22
+  knockbackImpulse: 3
   attackRange: 1.5
   attackCooldown: 0.6
   hitVolumePrefab: {fileID: 0}

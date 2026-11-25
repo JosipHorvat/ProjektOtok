@@ -19,6 +19,8 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
     private const float BackupAttackRange = 1f;
     private const float BackupAttackCooldown = 0.8f;
     private const float BackupStaggerImpact = 12f;
+    private const float BackupCriticalChance = 0.08f;
+    private const float BackupCriticalMultiplier = 1.5f;
 
     [Header("Visuals")]
     [SerializeField] private SpriteRenderer offhandKnifeRenderer;
@@ -107,6 +109,14 @@ public sealed class PlayerMeleeWeaponController : MonoBehaviour
         attackRange = BackupAttackRange;
         attackCooldown = BackupAttackCooldown;
         staggerImpact = BackupStaggerImpact;
+    }
+
+    /// <summary>Gets the critical-hit chance and multiplier from the active knife or built-in backup.</summary>
+    public void GetActiveCriticalStats(out float criticalChance, out float criticalMultiplier)
+    {
+        MeleeWeaponDefinition definition = FindCarriedCombatKnifeDefinition();
+        criticalChance = definition != null ? definition.CriticalChance : BackupCriticalChance;
+        criticalMultiplier = definition != null ? definition.CriticalMultiplier : BackupCriticalMultiplier;
     }
 
     /// <summary>Shows the hand knife only during the committed attack's draw-to-resheath interval; otherwise shows the hip knife.</summary>

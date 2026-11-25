@@ -118,7 +118,7 @@ public sealed class EnemyPlayerDetector : MonoBehaviour
                 continue;
             }
 
-            Vector2 toPlayer = (Vector2)candidatePlayer.transform.position - origin;
+            Vector2 toPlayer = (Vector2)candidateCollider.bounds.center - origin;
             float distance = toPlayer.magnitude;
             bool isBehind = Vector2.Dot(facing, toPlayer) < 0f;
             bool isInFrontCone = distance <= frontDetectionRadius
