@@ -117,6 +117,7 @@ public sealed class EnemyArmDismemberment2D : MonoBehaviour, IHitRegionDamageRec
 
         HideSourcePart(upperRenderer);
         HideSourcePart(lowerRenderer);
+        DisableLimbHitboxes(upperBone);
         if (isLeftArm)
         {
             leftArmDetached = true;
@@ -306,6 +307,16 @@ public sealed class EnemyArmDismemberment2D : MonoBehaviour, IHitRegionDamageRec
             && upperRenderer.sprite != null
             && lowerRenderer.sprite != null;
     }
+
+    private static void DisableLimbHitboxes(Transform limbRoot)
+    {
+        Collider2D[] limbColliders = limbRoot.GetComponentsInChildren<Collider2D>(true);
+        for (int index = 0; index < limbColliders.Length; index++)
+        {
+            limbColliders[index].enabled = false;
+        }
+    }
+
 
     private static void HideSourcePart(SpriteRenderer sourceRenderer)
     {

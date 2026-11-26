@@ -43,7 +43,11 @@ public sealed class HitRegionMarker : MonoBehaviour
         for (int index = 0; index < targetColliders.Length; index++)
         {
             Collider2D candidate = targetColliders[index];
-            if (candidate == null || candidate == hitCollider || !candidate.OverlapPoint(hitPoint))
+            if (candidate == null
+                || !candidate.enabled
+                || !candidate.gameObject.activeInHierarchy
+                || candidate == hitCollider
+                || !candidate.OverlapPoint(hitPoint))
             {
                 continue;
             }
