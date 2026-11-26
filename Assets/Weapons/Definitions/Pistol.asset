@@ -37,10 +37,11 @@ MonoBehaviour:
   shotsPerSecond: 2.5
   magazineCapacity: 20
   damage: 18
+  criticalChance: 1
+  criticalMultiplier: 1.5
   staggerImpact: 12
-  knockbackImpulse: 2.2
   pierce: 0
-  shotPower: 1
+  shotPower: 1.7
   projectilePrefab: {fileID: 6755061141863262301, guid: f07f4aba246172a4bb7ad199a8b3595c, type: 3}
   projectileSpeed: 30
   range: 25

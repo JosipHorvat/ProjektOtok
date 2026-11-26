@@ -1,6 +1,6 @@
 using UnityEngine;
 
-/// <summary>Stops enemy gameplay and plays its one-shot death animation when health is depleted.</summary>
+/// <summary>Stops enemy gameplay and activates its rig ragdoll when health is depleted.</summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyHealth))]
 public sealed class EnemyDeathHandler : MonoBehaviour
@@ -18,6 +18,9 @@ public sealed class EnemyDeathHandler : MonoBehaviour
     private EnemyPlayerDetector playerDetector;
     private Rigidbody2D body;
     private Collider2D[] colliders;
+    private EnemyRagdoll2D ragdoll;
+    private Vector2 lastHitPoint;
+    private Vector2 lastHitDirection;
     private bool hasHandledDeath;
 
     private void Awake()
@@ -28,6 +31,7 @@ public sealed class EnemyDeathHandler : MonoBehaviour
         playerDetector = GetComponent<EnemyPlayerDetector>();
         body = GetComponent<Rigidbody2D>();
         colliders = GetComponentsInChildren<Collider2D>(true);
+        ragdoll = GetComponent<EnemyRagdoll2D>();
 
         if (animator == null)
         {
@@ -39,6 +43,7 @@ public sealed class EnemyDeathHandler : MonoBehaviour
     {
         if (health != null)
         {
+            health.Damaged += HandleDamaged;
             health.Died += HandleDeath;
             if (health.IsDead)
             {
@@ -51,8 +56,15 @@ public sealed class EnemyDeathHandler : MonoBehaviour
     {
         if (health != null)
         {
+            health.Damaged -= HandleDamaged;
             health.Died -= HandleDeath;
         }
+    }
+
+    private void HandleDamaged(float damage, Vector2 hitPoint, Vector2 hitDirection)
+    {
+        lastHitPoint = hitPoint;
+        lastHitDirection = hitDirection;
     }
 
     private void HandleDeath()
@@ -92,6 +104,11 @@ public sealed class EnemyDeathHandler : MonoBehaviour
             {
                 colliders[i].enabled = false;
             }
+        }
+
+        if (ragdoll != null && ragdoll.Activate(lastHitPoint, lastHitDirection, health != null ? health.LastDamageImpactPower : 1f))
+        {
+            return;
         }
 
         if (animator != null && animator.isActiveAndEnabled)

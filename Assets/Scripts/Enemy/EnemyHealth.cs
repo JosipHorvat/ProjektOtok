@@ -17,7 +17,10 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
     /// <summary>The enemy's current health.</summary>
     public float CurrentHealth => currentHealth;
 
-    /// <summary>Whether this enemy has already been defeated.</summary>
+    /// <summary>Gets the power value supplied by the most recent accepted damage source.</summary>
+    public float LastDamageImpactPower { get; private set; } = 1f;
+
+    /// <summary>Whether the enemy has already been defeated.</summary>
     public bool IsDead { get; private set; }
 
     /// <summary>Raised after health changes, with current and maximum health values.</summary>
@@ -33,6 +36,7 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
     {
         maximumHealth = Mathf.Max(1f, maximumHealth);
         currentHealth = maximumHealth;
+        LastDamageImpactPower = 1f;
         IsDead = false;
     }
 
@@ -41,14 +45,21 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
         maximumHealth = Mathf.Max(1f, maximumHealth);
     }
 
-    /// <summary>Applies incoming damage and raises the death event once at zero health.</summary>
+    /// <summary>Applies incoming damage with a default impact power of one.</summary>
     public void ReceiveDamage(float damage, Vector2 hitPoint, Vector2 hitDirection)
+    {
+        ReceiveDamage(damage, hitPoint, hitDirection, 1f);
+    }
+
+    /// <summary>Applies incoming damage, recording impact power for the death response if this hit is lethal.</summary>
+    public void ReceiveDamage(float damage, Vector2 hitPoint, Vector2 hitDirection, float impactPower)
     {
         if (IsDead || damage <= 0f)
         {
             return;
         }
 
+        LastDamageImpactPower = Mathf.Max(0f, impactPower);
         currentHealth = Mathf.Max(0f, currentHealth - damage);
         HealthChanged?.Invoke(currentHealth, maximumHealth);
         Damaged?.Invoke(damage, hitPoint, hitDirection);

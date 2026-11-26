@@ -380,16 +380,21 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
                 attackDirection,
                 targetHealth != null ? targetHealth.CurrentHealth : 0f,
                 targetHealth != null ? targetHealth.MaximumHealth : 0f);
-            IHitRegionDamageReceiver2D regionDamageReceiver = FindHitRegionDamageReceiver(hitCollider);
             if (hitData.FinalDamage <= 0f)
             {
                 continue;
             }
 
-            regionDamageReceiver?.ReceiveHitRegionDamage(hitData);
+            NotifyHitRegionDamageReceivers(hitCollider, hitData);
             damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, attackDirection);
-            IHitReactionReceiver2D hitReaction = FindHitReactionReceiver(hitCollider);
-            hitReaction?.ReceiveHitReaction(activeStaggerImpact, hitPoint, attackDirection, hitRegion);
+            MonoBehaviour[] reactionComponents = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
+            for (int componentIndex = 0; componentIndex < reactionComponents.Length; componentIndex++)
+            {
+                if (reactionComponents[componentIndex] is IHitReactionReceiver2D hitReactionReceiver)
+                {
+                    hitReactionReceiver.ReceiveHitReaction(activeStaggerImpact, hitPoint, attackDirection, hitRegion);
+                }
+            }
         }
     }
 
@@ -432,18 +437,16 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
         return null;
     }
 
-    private static IHitRegionDamageReceiver2D FindHitRegionDamageReceiver(Collider2D hitCollider)
+    private static void NotifyHitRegionDamageReceivers(Collider2D hitCollider, CombatHitData hitData)
     {
         MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
         for (int index = 0; index < components.Length; index++)
         {
             if (components[index] is IHitRegionDamageReceiver2D regionDamageReceiver)
             {
-                return regionDamageReceiver;
+                regionDamageReceiver.ReceiveHitRegionDamage(hitData);
             }
         }
-
-        return null;
     }
 
     private static CharacterHitRegion FindHitRegion(Collider2D hitCollider)

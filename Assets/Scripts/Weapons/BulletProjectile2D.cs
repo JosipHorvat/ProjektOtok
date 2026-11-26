@@ -35,6 +35,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private float impactStagger;
     private float criticalChance;
     private float criticalMultiplier = 1f;
+    private float shotPower = 1f;
     private LayerMask collisionLayers;
     private Transform ownerRoot;
     private SpriteRenderer spriteRenderer;
@@ -42,8 +43,8 @@ public sealed class BulletProjectile2D : MonoBehaviour
     private Material runtimeUnlitMaterial;
     private bool isInitialized;
 
-    /// <summary>Launches this projectile with damage, critical-hit settings, stagger impact, and collision filtering.</summary>
-    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner, float damageAmount, float staggerImpactAmount, float criticalChanceAmount, float criticalDamageMultiplier)
+    /// <summary>Launches this projectile with damage, critical-hit settings, weapon impact power, stagger impact, and collision filtering.</summary>
+    public void Initialize(Vector2 travelDirection, float travelSpeed, float maximumDistance, LayerMask layers, Transform owner, float damageAmount, float staggerImpactAmount, float criticalChanceAmount, float criticalDamageMultiplier, float shotPowerAmount)
     {
         if (travelDirection.sqrMagnitude < MinimumDirectionSqrMagnitude)
         {
@@ -62,6 +63,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
         impactStagger = Mathf.Max(0f, staggerImpactAmount);
         criticalChance = Mathf.Clamp01(criticalChanceAmount);
         criticalMultiplier = Mathf.Max(1f, criticalDamageMultiplier);
+        shotPower = Mathf.Max(0f, shotPowerAmount);
         transform.right = direction;
         spriteRenderer.enabled = true;
         spriteRenderer.color = projectileColor;
@@ -211,7 +213,6 @@ public sealed class BulletProjectile2D : MonoBehaviour
         MonoBehaviour[] components = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
         IDamageable2D damageable = null;
         IHitReactionReceiver2D hitReaction = null;
-        IHitRegionDamageReceiver2D hitRegionDamageReceiver = null;
         for (int i = 0; i < components.Length; i++)
         {
             if (damageable == null && components[i] is IDamageable2D damageableComponent)
@@ -224,12 +225,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
                 hitReaction = reactionComponent;
             }
 
-            if (hitRegionDamageReceiver == null && components[i] is IHitRegionDamageReceiver2D regionDamageReceiver)
-            {
-                hitRegionDamageReceiver = regionDamageReceiver;
-            }
-
-            if (damageable != null && hitReaction != null && hitRegionDamageReceiver != null)
+            if (damageable != null && hitReaction != null)
             {
                 break;
             }
@@ -260,9 +256,30 @@ public sealed class BulletProjectile2D : MonoBehaviour
             return;
         }
 
-        hitRegionDamageReceiver?.ReceiveHitRegionDamage(hitData);
-        damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, direction);
-        hitReaction?.ReceiveHitReaction(impactStagger, hitPoint, direction, hitRegion);
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (components[i] is IHitRegionDamageReceiver2D regionDamageReceiver)
+            {
+                regionDamageReceiver.ReceiveHitRegionDamage(hitData);
+            }
+        }
+
+        if (targetHealth != null)
+        {
+            targetHealth.ReceiveDamage(hitData.FinalDamage, hitPoint, direction, shotPower);
+        }
+        else
+        {
+            damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, direction);
+        }
+
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (components[i] is IHitReactionReceiver2D hitReactionReceiver)
+            {
+                hitReactionReceiver.ReceiveHitReaction(impactStagger, hitPoint, direction, hitRegion);
+            }
+        }
     }
 
     private void OnDestroy()

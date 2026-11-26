@@ -16,6 +16,8 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     [Header("Patrol")]
     [Tooltip("Horizontal movement speed in world units per second.")]
     [SerializeField, Min(0f)] private float walkSpeed = 2f;
+    [Tooltip("Maximum per-enemy speed variation as a fraction of the base speed. Each enemy rolls once at initialization; 0.1 means plus or minus ten percent.")]
+    [SerializeField, Range(0f, 0.2f)] private float speedVariation = 0.1f;
     [Tooltip("Distance at which the enemy stops horizontal movement while chasing the player.")]
     [SerializeField, Min(0f)] private float chaseStoppingDistance = 0.8f;
     [Tooltip("When enabled, patrol begins moving right; otherwise it begins moving left.")]
@@ -58,6 +60,7 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     private bool isAttackPaused;
     private Transform chaseTarget;
     private float movementSlowMultiplier = 1f;
+    private float movementSpeedMultiplier = 1f;
     private float movementSlowRemaining;
     private bool hasWarnedMissingBody;
     private bool hasWarnedMissingVisualRoot;
@@ -100,6 +103,8 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
         }
 
         directionSign = startMovingRight ? 1 : -1;
+        float safeSpeedVariation = Mathf.Clamp(speedVariation, 0f, 0.2f);
+        movementSpeedMultiplier = Random.Range(1f - safeSpeedVariation, 1f + safeSpeedVariation);
         ApplyFacing();
     }
 
@@ -175,7 +180,7 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
             }
         }
 
-        float currentWalkSpeed = walkSpeed * movementSlowMultiplier;
+        float currentWalkSpeed = walkSpeed * movementSlowMultiplier * movementSpeedMultiplier;
         if (TryGetGroundHit(0f, out RaycastHit2D currentGroundHit)
             && IsGroundedAt(currentGroundHit)
             && TryGetGroundHit(groundProbeForwardDistance, out RaycastHit2D slopeHit)

@@ -18,7 +18,7 @@ TagManager:
   - Wall
   - Foregound
   - Enemy
-  - 
+  - EnemyAttack
   - 
   - 
   - 
@@ -55,6 +55,9 @@ TagManager:
     locked: 0
   - name: Player
     uniqueID: 3545446735
+    locked: 0
+  - name: Enemy
+    uniqueID: 729538459
     locked: 0
   - name: Wall
     uniqueID: 1316976657
