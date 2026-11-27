@@ -2847,6 +2847,8 @@ MonoBehaviour:
   attackRange: 1
   attackCooldown: 1.25
   maximumVerticalAttackDistance: 0.8
+  attackLungeDistance: 0.25
+  attackLungeDuration: 0.2
   attackDamage: 10
   oneArmDamageMultiplier: 0.75
   noArmsDamageMultiplier: 0.5

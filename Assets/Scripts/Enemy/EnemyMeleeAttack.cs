@@ -20,6 +20,11 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     [SerializeField, Min(0f)] private float attackCooldown = 1.25f;
     [Tooltip("Maximum vertical separation allowed for a melee attack.")]
     [SerializeField, Min(0f)] private float maximumVerticalAttackDistance = 0.8f;
+    [Header("Attack Movement")]
+    [Tooltip("Distance the enemy lunges forward during each attack, in world units.")]
+    [SerializeField, Min(0f)] private float attackLungeDistance = 0.25f;
+    [Tooltip("Time taken to complete the forward lunge, in seconds.")]
+    [SerializeField, Min(0.01f)] private float attackLungeDuration = 0.2f;
     [Tooltip("Damage applied to each IDamageable2D target hit once during an attack. The player needs a damage receiver before this can reduce player health.")]
     [SerializeField, Min(0f)] private float attackDamage = 10f;
     [Tooltip("Damage multiplier when exactly one arm remains.")]
@@ -273,6 +278,11 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     public void FinishAttack()
     {
         DisableAttackHitbox();
+        if (movement != null)
+        {
+            movement.StopAttackLunge();
+        }
+
         attackInProgress = false;
         isCoolingDown = Time.time < nextAttackTime;
         hitTargets.Clear();
@@ -297,6 +307,7 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     {
         movement.FaceTarget(target);
         movement.SetAttackPaused(true);
+        movement.StartAttackLunge(attackLungeDistance, attackLungeDuration);
         hitTargets.Clear();
         attackInProgress = true;
         isCoolingDown = false;

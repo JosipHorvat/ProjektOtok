@@ -76,6 +76,8 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     private bool isChasing;
     private bool isStaggered;
     private bool isAttackPaused;
+    private float attackLungeRemainingTime;
+    private float attackLungeSpeed;
     private Transform chaseTarget;
     private float movementSlowMultiplier = 1f;
     private float movementSpeedMultiplier = 1f;
@@ -229,7 +231,17 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
         if (isAttackPaused)
         {
             Vector2 pausedVelocity = body.linearVelocity;
-            pausedVelocity.x = 0f;
+            if (attackLungeRemainingTime > 0f)
+            {
+                float lungeStepDuration = Mathf.Min(Time.fixedDeltaTime, attackLungeRemainingTime);
+                pausedVelocity.x = directionSign * attackLungeSpeed * (lungeStepDuration / Time.fixedDeltaTime);
+                attackLungeRemainingTime -= lungeStepDuration;
+            }
+            else
+            {
+                pausedVelocity.x = 0f;
+            }
+
             body.linearVelocity = pausedVelocity;
             return;
         }
@@ -357,8 +369,38 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     /// <summary>Pauses horizontal movement while the attack animation plays, preserving vertical physics.</summary>
     public void SetAttackPaused(bool paused)
     {
+        bool wasAttackPaused = isAttackPaused;
         isAttackPaused = paused;
-        if (!paused || body == null)
+        attackLungeRemainingTime = 0f;
+        attackLungeSpeed = 0f;
+        if (body == null || (!paused && !wasAttackPaused))
+        {
+            return;
+        }
+
+        Vector2 velocity = body.linearVelocity;
+        velocity.x = 0f;
+        body.linearVelocity = velocity;
+    }
+
+    /// <summary>Starts a forward lunge while attack movement is paused.</summary>
+    public void StartAttackLunge(float distance, float duration)
+    {
+        if (!isAttackPaused || body == null || distance <= 0f || duration <= 0f)
+        {
+            return;
+        }
+
+        attackLungeRemainingTime = duration;
+        attackLungeSpeed = distance / duration;
+    }
+
+    /// <summary>Stops an active attack lunge without changing the enemy's vertical velocity.</summary>
+    public void StopAttackLunge()
+    {
+        attackLungeRemainingTime = 0f;
+        attackLungeSpeed = 0f;
+        if (body == null || !isAttackPaused)
         {
             return;
         }
