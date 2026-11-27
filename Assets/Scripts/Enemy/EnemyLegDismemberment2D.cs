@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.U2D.Animation;
 
 /// <summary>Detaches a whole animated leg when that leg receives a critical hit.</summary>
 [DisallowMultipleComponent]
@@ -16,14 +14,12 @@ public sealed class EnemyLegDismemberment2D : MonoBehaviour, IHitRegionDamageRec
     private const string LeftLowerSpriteName = "LegLBot";
     private const string RightUpperSpriteName = "LegRTop";
     private const string RightLowerSpriteName = "LegRBot";
-    private const float MinimumHitDirectionSqrMagnitude = 0.0001f;
+    private const float DetachedMass = 0.65f;
     private const float DefaultDetachImpulse = 2.4f;
     private const float DefaultUpwardBias = 0.4f;
     private const float DefaultMinimumSpinImpulse = 0.8f;
     private const float DefaultMaximumSpinImpulse = 1.8f;
     private const float DefaultDetachedLifetime = 12f;
-    private const float MinimumColliderWidth = 0.16f;
-    private const float MinimumColliderHeight = 0.35f;
 
     [Header("Detached limb physics")]
     [Tooltip("Impulse applied away from the hit when a leg separates.")]
@@ -37,21 +33,16 @@ public sealed class EnemyLegDismemberment2D : MonoBehaviour, IHitRegionDamageRec
     [Tooltip("Seconds before a detached leg is removed. Set to zero to keep it for the scene lifetime.")]
     [SerializeField, Min(0f)] private float detachedLifetime = DefaultDetachedLifetime;
 
+
     private Transform skeletonRoot;
-    private readonly Dictionary<Transform, Transform> detachedBones = new Dictionary<Transform, Transform>();
+    private EnemyLimbCondition2D limbCondition;
     private bool leftLegDetached;
     private bool rightLegDetached;
 
     private void Awake()
     {
-        Animator animator = GetComponentInChildren<Animator>(true);
-        if (animator == null)
-        {
-            Debug.LogError($"{nameof(EnemyLegDismemberment2D)} on '{name}' could not find the enemy Animator.", this);
-            return;
-        }
-
-        skeletonRoot = animator.transform;
+        skeletonRoot = EnemyDetachedLimbUtility2D.FindAnimatorRoot(this);
+        limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
     }
 
     /// <summary>Detaches the struck leg on a critical hit; ordinary hits do not dismember.</summary>
@@ -88,9 +79,9 @@ public sealed class EnemyLegDismemberment2D : MonoBehaviour, IHitRegionDamageRec
         string lowerBonePath = isLeftLeg ? LeftLowerLegPath : RightLowerLegPath;
         string footBonePath = isLeftLeg ? LeftFootPath : RightFootPath;
 
-        SpriteRenderer upperRenderer = FindSpriteRenderer(upperSpriteName);
-        SpriteRenderer lowerRenderer = FindSpriteRenderer(lowerSpriteName);
-        if (!CanDetach(upperRenderer, lowerRenderer))
+        SpriteRenderer upperRenderer = EnemyDetachedLimbUtility2D.FindSpriteRenderer(skeletonRoot, upperSpriteName);
+        SpriteRenderer lowerRenderer = EnemyDetachedLimbUtility2D.FindSpriteRenderer(skeletonRoot, lowerSpriteName);
+        if (!EnemyDetachedLimbUtility2D.CanDetach(upperRenderer, lowerRenderer))
         {
             Debug.LogError($"{nameof(EnemyLegDismemberment2D)} on '{name}' could not find both rendered parts of the {(isLeftLeg ? "left" : "right")} leg.", this);
             return;
@@ -105,18 +96,36 @@ public sealed class EnemyLegDismemberment2D : MonoBehaviour, IHitRegionDamageRec
             return;
         }
 
-        Bounds limbBounds = upperRenderer.bounds;
-        limbBounds.Encapsulate(lowerRenderer.bounds);
-        GameObject detachedLeg = CreateDetachedLeg(isLeftLeg, hitPoint, hitDirection, limbBounds,
-            new[] { upperRenderer, lowerRenderer }, new[] { upperBone, lowerBone, footBone });
+        Bounds limbBounds = EnemyDetachedLimbUtility2D.GetLimbBounds(upperRenderer, lowerRenderer);
+        GameObject detachedLeg = EnemyDetachedLimbUtility2D.CreateDetachedLimb(
+            this,
+            isLeftLeg ? "DetachedLeftLeg" : "DetachedRightLeg",
+            skeletonRoot,
+            limbBounds,
+            new[] { upperRenderer, lowerRenderer },
+            new[] { upperBone, lowerBone, footBone },
+            hitPoint,
+            hitDirection,
+            DetachedMass,
+            detachImpulse,
+            upwardBias,
+            minimumSpinImpulse,
+            maximumSpinImpulse,
+            detachedLifetime);
         if (detachedLeg == null)
         {
             return;
         }
 
-        HideSourcePart(upperRenderer);
-        HideSourcePart(lowerRenderer);
-        DisableLimbHitboxes(upperBone);
+        EnemyLimbCondition2D.Limb limb = isLeftLeg ? EnemyLimbCondition2D.Limb.LeftLeg : EnemyLimbCondition2D.Limb.RightLeg;
+        // EnemyLimbVisuals2D enables the authored replacement-part GameObject when this loss is recorded.
+
+        EnemyDetachedLimbUtility2D.HideSourcePart(upperRenderer);
+        EnemyDetachedLimbUtility2D.HideSourcePart(lowerRenderer);
+        EnemyDetachedLimbUtility2D.DisableLimbHitboxes(
+            this,
+            isLeftLeg ? CharacterHitRegion.LeftLeg : CharacterHitRegion.RightLeg);
+
         if (isLeftLeg)
         {
             leftLegDetached = true;
@@ -125,211 +134,10 @@ public sealed class EnemyLegDismemberment2D : MonoBehaviour, IHitRegionDamageRec
         {
             rightLegDetached = true;
         }
-    }
 
-    private GameObject CreateDetachedLeg(
-        bool isLeftLeg,
-        Vector2 hitPoint,
-        Vector2 hitDirection,
-        Bounds limbBounds,
-        SpriteRenderer[] sourceRenderers,
-        Transform[] requiredBones)
-    {
-        detachedBones.Clear();
-        GameObject detachedRoot = new GameObject(isLeftLeg ? "DetachedLeftLeg" : "DetachedRightLeg");
-        Transform detachedTransform = detachedRoot.transform;
-        detachedTransform.SetPositionAndRotation(skeletonRoot.position, skeletonRoot.rotation);
-        detachedTransform.localScale = skeletonRoot.lossyScale;
-        detachedRoot.layer = gameObject.layer;
-        detachedRoot.SetActive(false);
-
-        for (int index = 0; index < requiredBones.Length; index++)
+        if (limbCondition != null)
         {
-            if (!CreateBoneChain(requiredBones[index], detachedTransform))
-            {
-                Destroy(detachedRoot);
-                return null;
-            }
-        }
-
-        for (int index = 0; index < sourceRenderers.Length; index++)
-        {
-            if (!CreateDetachedSprite(sourceRenderers[index], detachedTransform))
-            {
-                Destroy(detachedRoot);
-                return null;
-            }
-        }
-
-        Rigidbody2D body = detachedRoot.AddComponent<Rigidbody2D>();
-        body.bodyType = RigidbodyType2D.Dynamic;
-        body.mass = 0.65f;
-        body.gravityScale = 1f;
-        body.linearDamping = 0.2f;
-        body.angularDamping = 1.2f;
-        body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        body.interpolation = RigidbodyInterpolation2D.Interpolate;
-
-        CapsuleCollider2D collider = detachedRoot.AddComponent<CapsuleCollider2D>();
-        collider.direction = CapsuleDirection2D.Vertical;
-        Vector3 worldScale = detachedTransform.lossyScale;
-        float scaleX = Mathf.Max(0.001f, Mathf.Abs(worldScale.x));
-        float scaleY = Mathf.Max(0.001f, Mathf.Abs(worldScale.y));
-        collider.size = new Vector2(
-            Mathf.Max(MinimumColliderWidth, limbBounds.size.x / scaleX),
-            Mathf.Max(MinimumColliderHeight, limbBounds.size.y / scaleY));
-        collider.offset = detachedTransform.InverseTransformPoint(limbBounds.center);
-
-        detachedRoot.SetActive(true);
-        Vector2 awayFromHit = hitDirection.sqrMagnitude > MinimumHitDirectionSqrMagnitude
-            ? -hitDirection.normalized
-            : ((Vector2)limbBounds.center - hitPoint).normalized;
-        if (awayFromHit.sqrMagnitude <= MinimumHitDirectionSqrMagnitude)
-        {
-            awayFromHit = Vector2.right;
-        }
-
-        Vector2 launchDirection = (awayFromHit + Vector2.up * upwardBias).normalized;
-        body.AddForceAtPosition(launchDirection * detachImpulse, hitPoint, ForceMode2D.Impulse);
-        float spinSign = awayFromHit.x >= 0f ? 1f : -1f;
-        float spinImpulse = Random.Range(minimumSpinImpulse, Mathf.Max(minimumSpinImpulse, maximumSpinImpulse));
-        body.AddTorque(spinSign * spinImpulse, ForceMode2D.Impulse);
-
-        if (detachedLifetime > 0f)
-        {
-            Destroy(detachedRoot, detachedLifetime);
-        }
-
-        return detachedRoot;
-    }
-
-    private bool CreateBoneChain(Transform sourceBone, Transform detachedRoot)
-    {
-        if (sourceBone == null || detachedBones.ContainsKey(sourceBone))
-        {
-            return sourceBone != null;
-        }
-
-        Transform sourceParent = sourceBone.parent;
-        Transform detachedParent = sourceParent == skeletonRoot
-            ? detachedRoot
-            : detachedBones.TryGetValue(sourceParent, out Transform mappedParent) ? mappedParent : null;
-        if (detachedParent == null)
-        {
-            if (!CreateBoneChain(sourceParent, detachedRoot))
-            {
-                return false;
-            }
-
-            detachedParent = detachedBones[sourceParent];
-        }
-
-        GameObject boneObject = new GameObject(sourceBone.name);
-        Transform detachedBone = boneObject.transform;
-        detachedBone.SetParent(detachedParent, false);
-        detachedBone.localPosition = sourceBone.localPosition;
-        detachedBone.localRotation = sourceBone.localRotation;
-        detachedBone.localScale = sourceBone.localScale;
-        detachedBones.Add(sourceBone, detachedBone);
-        return true;
-    }
-
-    private bool CreateDetachedSprite(SpriteRenderer sourceRenderer, Transform detachedRoot)
-    {
-        SpriteSkin sourceSkin = sourceRenderer.GetComponent<SpriteSkin>();
-        if (sourceSkin == null || sourceSkin.boneTransforms == null || sourceSkin.boneTransforms.Length == 0)
-        {
-            Debug.LogError($"{nameof(EnemyLegDismemberment2D)} on '{name}' found an invalid SpriteSkin on '{sourceRenderer.name}'.", this);
-            return false;
-        }
-
-        Transform[] sourceBones = sourceSkin.boneTransforms;
-        Transform[] mappedBones = new Transform[sourceBones.Length];
-        for (int index = 0; index < sourceBones.Length; index++)
-        {
-            if (!detachedBones.TryGetValue(sourceBones[index], out mappedBones[index]))
-            {
-                Debug.LogError($"{nameof(EnemyLegDismemberment2D)} on '{name}' could not map a SpriteSkin bone for '{sourceRenderer.name}'.", this);
-                return false;
-            }
-        }
-
-        GameObject spriteObject = new GameObject(sourceRenderer.name);
-        Transform spriteTransform = spriteObject.transform;
-        spriteTransform.SetParent(detachedRoot, false);
-        spriteTransform.localPosition = sourceRenderer.transform.localPosition;
-        spriteTransform.localRotation = sourceRenderer.transform.localRotation;
-        spriteTransform.localScale = sourceRenderer.transform.localScale;
-        spriteObject.layer = detachedRoot.gameObject.layer;
-
-        SpriteRenderer detachedRenderer = spriteObject.AddComponent<SpriteRenderer>();
-        CopyRendererSettings(sourceRenderer, detachedRenderer);
-        SpriteSkin detachedSkin = spriteObject.AddComponent<SpriteSkin>();
-        detachedSkin.autoRebind = false;
-        detachedSkin.SetRootBone(detachedRoot);
-        detachedSkin.SetBoneTransforms(mappedBones);
-        detachedSkin.alwaysUpdate = true;
-        return true;
-    }
-
-    private static void CopyRendererSettings(SpriteRenderer source, SpriteRenderer destination)
-    {
-        destination.sprite = source.sprite;
-        destination.color = source.color;
-        destination.flipX = source.flipX;
-        destination.flipY = source.flipY;
-        destination.drawMode = source.drawMode;
-        destination.maskInteraction = source.maskInteraction;
-        destination.spriteSortPoint = source.spriteSortPoint;
-        destination.sharedMaterial = source.sharedMaterial;
-        destination.sortingLayerID = source.sortingLayerID;
-        destination.sortingOrder = source.sortingOrder;
-        destination.size = source.size;
-        destination.tileMode = source.tileMode;
-        destination.adaptiveModeThreshold = source.adaptiveModeThreshold;
-        destination.renderingLayerMask = source.renderingLayerMask;
-        destination.enabled = source.enabled;
-    }
-
-    private SpriteRenderer FindSpriteRenderer(string objectName)
-    {
-        Transform spriteTransform = skeletonRoot.Find(objectName);
-        return spriteTransform != null ? spriteTransform.GetComponent<SpriteRenderer>() : null;
-    }
-
-    private static bool CanDetach(SpriteRenderer upperRenderer, SpriteRenderer lowerRenderer)
-    {
-        return upperRenderer != null
-            && lowerRenderer != null
-            && upperRenderer.enabled
-            && lowerRenderer.enabled
-            && upperRenderer.sprite != null
-            && lowerRenderer.sprite != null;
-    }
-
-    private static void DisableLimbHitboxes(Transform limbRoot)
-    {
-        Collider2D[] limbColliders = limbRoot.GetComponentsInChildren<Collider2D>(true);
-        for (int index = 0; index < limbColliders.Length; index++)
-        {
-            limbColliders[index].enabled = false;
-        }
-    }
-
-
-    private static void HideSourcePart(SpriteRenderer sourceRenderer)
-    {
-        sourceRenderer.enabled = false;
-        SpriteSkin sourceSkin = sourceRenderer.GetComponent<SpriteSkin>();
-        if (sourceSkin != null)
-        {
-            sourceSkin.enabled = false;
-        }
-
-        Collider2D[] colliders = sourceRenderer.GetComponents<Collider2D>();
-        for (int index = 0; index < colliders.Length; index++)
-        {
-            colliders[index].enabled = false;
+            limbCondition.RecordLimbLoss(limb);
         }
     }
 }

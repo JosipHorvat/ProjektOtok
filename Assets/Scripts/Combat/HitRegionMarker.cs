@@ -19,7 +19,7 @@ public sealed class HitRegionMarker : MonoBehaviour
     /// <param name="hitCollider">The collider returned by the physics query.</param>
     /// <param name="damageable">The damageable character hit by the query.</param>
     /// <param name="hitPoint">The world-space contact point.</param>
-    /// <returns>The direct region marker or an overlapping specific body-part marker; null when none exists.</returns>
+    /// <returns>A direct non-torso marker, otherwise the nearest-center overlapping non-torso marker or the direct torso marker; null when none exists.</returns>
     public static HitRegionMarker FindAtHitPoint(Collider2D hitCollider, IDamageable2D damageable, Vector2 hitPoint)
     {
         if (hitCollider == null)
@@ -39,6 +39,8 @@ public sealed class HitRegionMarker : MonoBehaviour
             return directMarker;
         }
 
+        HitRegionMarker bestMarker = null;
+        float nearestCenterSqrDistance = float.PositiveInfinity;
         Collider2D[] targetColliders = damageableComponent.GetComponentsInChildren<Collider2D>(true);
         for (int index = 0; index < targetColliders.Length; index++)
         {
@@ -53,12 +55,23 @@ public sealed class HitRegionMarker : MonoBehaviour
             }
 
             HitRegionMarker candidateMarker = candidate.GetComponent<HitRegionMarker>();
-            if (candidateMarker != null && candidateMarker.region != CharacterHitRegion.Torso)
+            if (candidateMarker == null || candidateMarker.region == CharacterHitRegion.Torso)
             {
-                return candidateMarker;
+                continue;
+            }
+
+            // Among specific overlaps, use the nearest center and break exact ties by region.
+            float centerSqrDistance = ((Vector2)candidate.bounds.center - hitPoint).sqrMagnitude;
+            if (bestMarker == null || centerSqrDistance < nearestCenterSqrDistance
+                || (centerSqrDistance == nearestCenterSqrDistance && (int)candidateMarker.region < (int)bestMarker.region)
+                || (centerSqrDistance == nearestCenterSqrDistance && candidateMarker.region == bestMarker.region
+                    && candidateMarker.damageMultiplier < bestMarker.damageMultiplier))
+            {
+                bestMarker = candidateMarker;
+                nearestCenterSqrDistance = centerSqrDistance;
             }
         }
 
-        return directMarker;
+        return bestMarker != null ? bestMarker : directMarker;
     }
 }

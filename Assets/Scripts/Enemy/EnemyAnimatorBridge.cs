@@ -67,7 +67,12 @@ public sealed class EnemyAnimatorBridge : MonoBehaviour
 
     private void ApplyLocomotionState(EnemyPatrolState state)
     {
-        animator.SetBool(IsWalkingParameter, state != EnemyPatrolState.Idle);
-        animator.SetBool(IsChasingParameter, state == EnemyPatrolState.Chase);
+        ApplyLocomotionState(animator, state);
+    }
+
+    internal static void ApplyLocomotionState(Animator targetAnimator, EnemyPatrolState state)
+    {
+        targetAnimator.SetBool(IsWalkingParameter, state != EnemyPatrolState.Idle);
+        targetAnimator.SetBool(IsChasingParameter, state == EnemyPatrolState.Chase);
     }
 }

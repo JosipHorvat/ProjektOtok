@@ -7,8 +7,11 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
 {
     private const string AttackTriggerParameter = "Attack";
     private const string WalkingParameter = "IsWalking";
-    private const string ChasingParameter = "IsChasing";
     private const string CombatIdleParameter = "IsCombatIdle";
+    private const float DefaultOneArmDamageMultiplier = 0.75f;
+    private const float DefaultNoArmsDamageMultiplier = 0.5f;
+    private const float DefaultOneArmCooldownMultiplier = 1.25f;
+    private const float DefaultNoArmsCooldownMultiplier = 1.5f;
 
     [Header("Attack Timing")]
     [Tooltip("Maximum horizontal distance from the enemy root to the target at which an attack can start.")]
@@ -19,12 +22,22 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     [SerializeField, Min(0f)] private float maximumVerticalAttackDistance = 0.8f;
     [Tooltip("Damage applied to each IDamageable2D target hit once during an attack. The player needs a damage receiver before this can reduce player health.")]
     [SerializeField, Min(0f)] private float attackDamage = 10f;
+    [Tooltip("Damage multiplier when exactly one arm remains.")]
+    [SerializeField, Min(0f)] private float oneArmDamageMultiplier = DefaultOneArmDamageMultiplier;
+    [Tooltip("Damage multiplier when no arms remain.")]
+    [SerializeField, Min(0f)] private float noArmsDamageMultiplier = DefaultNoArmsDamageMultiplier;
+    [Tooltip("Cooldown multiplier when exactly one arm remains.")]
+    [SerializeField, Min(1f)] private float oneArmCooldownMultiplier = DefaultOneArmCooldownMultiplier;
+    [Tooltip("Cooldown multiplier when no arms remain.")]
+    [SerializeField, Min(1f)] private float noArmsCooldownMultiplier = DefaultNoArmsCooldownMultiplier;
 
     [Header("References")]
-    [Tooltip("Animator on this GameObject. Automatically cached when left empty.")]
+    [Tooltip("Animator on this GameObject or a child. Automatically cached when left empty.")]
     [SerializeField] private Animator animator;
-    [Tooltip("Trigger collider on this GameObject. Its size and offset define the current attack's reach; animation events enable it only during the strike.")]
+    [Tooltip("Assign the melee trigger explicitly if it is not on this GameObject. Animation events enable it only during the strike.")]
     [SerializeField] private BoxCollider2D attackHitbox;
+    [Tooltip("Limb condition source. Automatically cached from a parent when left empty.")]
+    [SerializeField] private EnemyLimbCondition2D limbCondition;
 
     private readonly HashSet<IDamageable2D> hitTargets = new HashSet<IDamageable2D>();
     private EnemyPatrolMovement movement;
@@ -33,6 +46,9 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     private CharacterStagger characterStagger;
     private EnemyHealth health;
     private float nextAttackTime;
+    private float effectiveDamageMultiplier = 1f;
+    private float effectiveCooldownMultiplier = 1f;
+    private float currentAttackDamage;
     private bool attackInProgress;
     private bool isCoolingDown;
     private bool hasWarnedMissingSetup;
@@ -41,7 +57,7 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
     {
         if (animator == null)
         {
-            animator = GetComponent<Animator>();
+            animator = GetComponentInChildren<Animator>(true);
         }
 
         if (attackHitbox == null)
@@ -54,6 +70,10 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
         playerDetector = GetComponentInParent<EnemyPlayerDetector>();
         characterStagger = GetComponentInParent<CharacterStagger>();
         health = GetComponentInParent<EnemyHealth>();
+        if (limbCondition == null)
+        {
+            limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
+        }
 
         if (attackHitbox != null)
         {
@@ -71,6 +91,18 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
 
     private void OnEnable()
     {
+        if (limbCondition == null)
+        {
+            limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
+        }
+
+        if (limbCondition != null)
+        {
+            limbCondition.LimbLost += HandleLimbLost;
+        }
+
+        RefreshArmModifiers();
+
         if (health != null)
         {
             health.Died += HandleDeath;
@@ -79,12 +111,57 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
 
     private void OnDisable()
     {
+        UnsubscribeFromLimbCondition();
+
         if (health != null)
         {
             health.Died -= HandleDeath;
         }
 
         CancelAttack();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeFromLimbCondition();
+
+        if (health != null)
+        {
+            health.Died -= HandleDeath;
+        }
+    }
+
+    private void HandleLimbLost(EnemyLimbCondition2D condition, EnemyLimbCondition2D.Limb limb)
+    {
+        RefreshArmModifiers();
+    }
+
+    private void RefreshArmModifiers()
+    {
+        int remainingArms = limbCondition != null ? limbCondition.RemainingArmCount : 2;
+        if (remainingArms == 1)
+        {
+            effectiveDamageMultiplier = oneArmDamageMultiplier;
+            effectiveCooldownMultiplier = Mathf.Max(1f, oneArmCooldownMultiplier);
+        }
+        else if (remainingArms == 0)
+        {
+            effectiveDamageMultiplier = noArmsDamageMultiplier;
+            effectiveCooldownMultiplier = Mathf.Max(1f, noArmsCooldownMultiplier);
+        }
+        else
+        {
+            effectiveDamageMultiplier = 1f;
+            effectiveCooldownMultiplier = 1f;
+        }
+    }
+
+    private void UnsubscribeFromLimbCondition()
+    {
+        if (limbCondition != null)
+        {
+            limbCondition.LimbLost -= HandleLimbLost;
+        }
     }
 
     private void Update()
@@ -187,7 +264,7 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
 
             Vector2 hitPoint = other.ClosestPoint(transform.position);
             Vector2 hitDirection = ((Vector2)other.transform.position - (Vector2)transform.position).normalized;
-            damageable.ReceiveDamage(attackDamage, hitPoint, hitDirection);
+            damageable.ReceiveDamage(currentAttackDamage, hitPoint, hitDirection);
             break;
         }
     }
@@ -223,7 +300,9 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
         hitTargets.Clear();
         attackInProgress = true;
         isCoolingDown = false;
-        nextAttackTime = Time.time + attackCooldown;
+        currentAttackDamage = attackDamage * effectiveDamageMultiplier;
+        float currentAttackCooldown = attackCooldown * effectiveCooldownMultiplier;
+        nextAttackTime = Time.time + currentAttackCooldown;
         animator.SetBool(CombatIdleParameter, false);
         animator.SetBool(WalkingParameter, false);
         animator.ResetTrigger(AttackTriggerParameter);
@@ -262,8 +341,6 @@ public sealed class EnemyMeleeAttack : MonoBehaviour
             return;
         }
 
-        bool isChasing = stateMachine.CurrentState == EnemyPatrolState.Chase;
-        animator.SetBool(WalkingParameter, stateMachine.CurrentState != EnemyPatrolState.Idle);
-        animator.SetBool(ChasingParameter, isChasing);
+        EnemyAnimatorBridge.ApplyLocomotionState(animator, stateMachine.CurrentState);
     }
 }

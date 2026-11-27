@@ -266,7 +266,7 @@ public sealed class BulletProjectile2D : MonoBehaviour
 
         if (targetHealth != null)
         {
-            targetHealth.ReceiveDamage(hitData.FinalDamage, hitPoint, direction, shotPower);
+            targetHealth.ReceiveDamage(hitData, shotPower);
         }
         else
         {

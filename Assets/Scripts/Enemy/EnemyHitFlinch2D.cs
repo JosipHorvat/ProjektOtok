@@ -93,7 +93,7 @@ public sealed class EnemyHitFlinch2D : MonoBehaviour
     {
         if (health != null)
         {
-            health.Damaged += HandleDamaged;
+            health.DamageResolved += HandleDamageResolved;
         }
     }
 
@@ -101,7 +101,7 @@ public sealed class EnemyHitFlinch2D : MonoBehaviour
     {
         if (health != null)
         {
-            health.Damaged -= HandleDamaged;
+            health.DamageResolved -= HandleDamageResolved;
         }
 
         StopAllFlinches();
@@ -184,7 +184,7 @@ public sealed class EnemyHitFlinch2D : MonoBehaviour
         }
     }
 
-    private void HandleDamaged(float damage, Vector2 hitPoint, Vector2 hitDirection)
+    private void HandleDamageResolved(Vector2 hitPoint, Vector2 hitDirection, CharacterHitRegion? hitRegion)
     {
         if (health == null || health.IsDead || health.CurrentHealth <= 0f)
         {
@@ -196,7 +196,7 @@ public sealed class EnemyHitFlinch2D : MonoBehaviour
         Vector2 pushDirection = hitDirection.sqrMagnitude > MinimumDirectionSqrMagnitude
             ? hitDirection
             : (Vector2)transform.position - hitPoint;
-        PlayFlinch(ResolveHitRegion(hitPoint), pushDirection);
+        PlayFlinch(hitRegion ?? ResolveHitRegion(hitPoint), pushDirection);
     }
 
     private void KickLimb(int upperBoneIndex, int lowerBoneIndex, Vector2 pushDirection, float degrees)

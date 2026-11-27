@@ -386,7 +386,14 @@ public sealed class PlayerMeleeAttackController : MonoBehaviour
             }
 
             NotifyHitRegionDamageReceivers(hitCollider, hitData);
-            damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, attackDirection);
+            if (targetHealth != null)
+            {
+                targetHealth.ReceiveDamage(hitData);
+            }
+            else
+            {
+                damageable.ReceiveDamage(hitData.FinalDamage, hitPoint, attackDirection);
+            }
             MonoBehaviour[] reactionComponents = hitCollider.GetComponentsInParent<MonoBehaviour>(true);
             for (int componentIndex = 0; componentIndex < reactionComponents.Length; componentIndex++)
             {

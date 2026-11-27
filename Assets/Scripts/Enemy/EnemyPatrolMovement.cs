@@ -1,10 +1,20 @@
 using UnityEngine;
 
+/// <summary>Describes patrol movement capabilities after leg loss.</summary>
+public enum EnemyLimbMovementMode2D
+{
+    Standard,
+    OneLegLost,
+    BothLegsLost
+}
+
 /// <summary>Applies horizontal patrol movement and probes the path ahead.</summary>
 public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
 {
     private const int ProbeHitCapacity = 16;
     private const float MinimumVisualScaleMagnitude = 0.0001f;
+    private const float DefaultOneLegLostSpeedMultiplier = 0.75f;
+    private const float DefaultBothLegsLostSpeedMultiplier = 0.45f;
     private const string DefaultWallLayerName = "Wall";
 
     [Header("References")]
@@ -12,6 +22,8 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     [SerializeField] private Rigidbody2D body;
     [Tooltip("Visual child whose local X scale is flipped to face the patrol direction. Automatically cached from a child when left empty.")]
     [SerializeField] private Transform visualRoot;
+    [Tooltip("Limb condition source. Automatically cached from this GameObject when left empty.")]
+    [SerializeField] private EnemyLimbCondition2D limbCondition;
 
     [Header("Patrol")]
     [Tooltip("Horizontal movement speed in world units per second.")]
@@ -22,6 +34,12 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     [SerializeField, Min(0f)] private float chaseStoppingDistance = 0.8f;
     [Tooltip("When enabled, patrol begins moving right; otherwise it begins moving left.")]
     [SerializeField] private bool startMovingRight;
+
+    [Header("Limb Loss")]
+    [Tooltip("Movement speed multiplier while one leg remains lost. Both legs lost uses the separate reduced multiplier; no crawl animation is currently available.")]
+    [SerializeField, Range(0f, 1f)] private float oneLegLostSpeedMultiplier = DefaultOneLegLostSpeedMultiplier;
+    [Tooltip("Movement speed multiplier when both legs are lost. This is a gameplay movement mode only; no crawl animation/controller state is available.")]
+    [SerializeField, Range(0f, 1f)] private float bothLegsLostSpeedMultiplier = DefaultBothLegsLostSpeedMultiplier;
 
     [Header("Ground Check")]
     [Tooltip("Optional marker positioned at the enemy's feet. Ground rays start here; if empty, the collider's bottom is used.")]
@@ -62,11 +80,15 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
     private float movementSlowMultiplier = 1f;
     private float movementSpeedMultiplier = 1f;
     private float movementSlowRemaining;
+    private float limbMovementMultiplier = 1f;
     private bool hasWarnedMissingBody;
     private bool hasWarnedMissingVisualRoot;
 
     /// <summary>The enemy's current horizontal facing direction.</summary>
     public int FacingDirection => directionSign;
+
+    /// <summary>Explicit movement capability mode derived from the current leg-loss state.</summary>
+    public EnemyLimbMovementMode2D CurrentMovementMode { get; private set; }
 
     private void Awake()
     {
@@ -76,6 +98,10 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
         }
 
         groundCollider = GetComponent<Collider2D>();
+        if (limbCondition == null)
+        {
+            limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
+        }
 
         if (body == null && !hasWarnedMissingBody)
         {
@@ -106,6 +132,64 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
         float safeSpeedVariation = Mathf.Clamp(speedVariation, 0f, 0.2f);
         movementSpeedMultiplier = Random.Range(1f - safeSpeedVariation, 1f + safeSpeedVariation);
         ApplyFacing();
+    }
+
+    private void OnEnable()
+    {
+        if (limbCondition == null)
+        {
+            limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
+        }
+
+        if (limbCondition != null)
+        {
+            limbCondition.LimbLost += HandleLimbLost;
+        }
+
+        RefreshLimbMovementMode();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromLimbCondition();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeFromLimbCondition();
+    }
+
+    private void HandleLimbLost(EnemyLimbCondition2D condition, EnemyLimbCondition2D.Limb limb)
+    {
+        RefreshLimbMovementMode();
+    }
+
+    private void RefreshLimbMovementMode()
+    {
+        int remainingLegs = limbCondition != null ? limbCondition.RemainingLegCount : 2;
+        if (remainingLegs == 1)
+        {
+            CurrentMovementMode = EnemyLimbMovementMode2D.OneLegLost;
+            limbMovementMultiplier = Mathf.Clamp01(oneLegLostSpeedMultiplier);
+        }
+        else if (remainingLegs == 0)
+        {
+            CurrentMovementMode = EnemyLimbMovementMode2D.BothLegsLost;
+            limbMovementMultiplier = Mathf.Clamp01(bothLegsLostSpeedMultiplier);
+        }
+        else
+        {
+            CurrentMovementMode = EnemyLimbMovementMode2D.Standard;
+            limbMovementMultiplier = 1f;
+        }
+    }
+
+    private void UnsubscribeFromLimbCondition()
+    {
+        if (limbCondition != null)
+        {
+            limbCondition.LimbLost -= HandleLimbLost;
+        }
     }
 
     private void Update()
@@ -180,7 +264,7 @@ public sealed class EnemyPatrolMovement : MonoBehaviour, IHitReactionMovement2D
             }
         }
 
-        float currentWalkSpeed = walkSpeed * movementSlowMultiplier * movementSpeedMultiplier;
+        float currentWalkSpeed = walkSpeed * movementSlowMultiplier * movementSpeedMultiplier * limbMovementMultiplier;
         if (TryGetGroundHit(0f, out RaycastHit2D currentGroundHit)
             && IsGroundedAt(currentGroundHit)
             && TryGetGroundHit(groundProbeForwardDistance, out RaycastHit2D slopeHit)

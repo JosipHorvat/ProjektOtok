@@ -5,6 +5,7 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer), typeof(CircleCollider2D), typeof(HitRegionMarker))]
 public sealed class EnemyHeadDismemberment : MonoBehaviour, IHitRegionDamageReceiver2D
 {
+
     [Header("Dismemberment")]
     [Tooltip("Prefab spawned when a critical head hit detaches this head. It must include EnemyDetachedHead, SpriteRenderer, CircleCollider2D, and Rigidbody2D.")]
     [SerializeField] private EnemyDetachedHead detachedHeadPrefab;
@@ -13,12 +14,14 @@ public sealed class EnemyHeadDismemberment : MonoBehaviour, IHitRegionDamageRece
 
     private SpriteRenderer headRenderer;
     private CircleCollider2D headHitbox;
+    private EnemyLimbCondition2D limbCondition;
     private bool isDetached;
 
     private void Awake()
     {
         headRenderer = GetComponent<SpriteRenderer>();
         headHitbox = GetComponent<CircleCollider2D>();
+        limbCondition = GetComponentInParent<EnemyLimbCondition2D>();
 
         if (headHitbox != null)
         {
@@ -60,10 +63,16 @@ public sealed class EnemyHeadDismemberment : MonoBehaviour, IHitRegionDamageRece
             headRenderer.transform.position,
             headRenderer.transform.rotation);
         detachedHead.Initialize(headRenderer, hitPoint, hitDirection, detachedLifetime);
+
         headRenderer.enabled = false;
         if (headHitbox != null)
         {
             headHitbox.enabled = false;
+        }
+
+        if (limbCondition != null)
+        {
+            limbCondition.RecordLimbLoss(EnemyLimbCondition2D.Limb.Head);
         }
     }
 }

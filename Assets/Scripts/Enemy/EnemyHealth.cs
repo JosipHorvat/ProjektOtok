@@ -29,6 +29,9 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
     /// <summary>Raised when positive damage is accepted, before Died on a lethal hit.</summary>
     public event Action<float, Vector2, Vector2> Damaged;
 
+    // Carries an explicit region for resolved weapon hits; other damage keeps the positional fallback.
+    internal event Action<Vector2, Vector2, CharacterHitRegion?> DamageResolved;
+
     /// <summary>Raised once when health reaches zero.</summary>
     public event Action Died;
 
@@ -54,6 +57,17 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
     /// <summary>Applies incoming damage, recording impact power for the death response if this hit is lethal.</summary>
     public void ReceiveDamage(float damage, Vector2 hitPoint, Vector2 hitDirection, float impactPower)
     {
+        ApplyDamage(damage, hitPoint, hitDirection, impactPower, null);
+    }
+
+    /// <summary>Applies an already-resolved weapon hit without rerolling its damage or region.</summary>
+    public void ReceiveDamage(CombatHitData hit, float impactPower = 1f)
+    {
+        ApplyDamage(hit.FinalDamage, hit.HitPoint, hit.HitDirection, impactPower, hit.HitRegion);
+    }
+
+    private void ApplyDamage(float damage, Vector2 hitPoint, Vector2 hitDirection, float impactPower, CharacterHitRegion? hitRegion)
+    {
         if (IsDead || damage <= 0f)
         {
             return;
@@ -63,6 +77,7 @@ public sealed class EnemyHealth : MonoBehaviour, IDamageable2D, IDamageFeedbackS
         currentHealth = Mathf.Max(0f, currentHealth - damage);
         HealthChanged?.Invoke(currentHealth, maximumHealth);
         Damaged?.Invoke(damage, hitPoint, hitDirection);
+        DamageResolved?.Invoke(hitPoint, hitDirection, hitRegion);
 
         if (currentHealth <= 0f)
         {
